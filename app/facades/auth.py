@@ -4,10 +4,13 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.config import settings
+
 from repositories import (
     UserRepository,
     RoleRepository,
     RefreshTokenRepository,
+    AuditLogRepository,
 )
 
 from schemas import (
@@ -17,6 +20,8 @@ from schemas import (
     UserCreate,
     UserResponse,
 )
+
+from services import AuditLogService
 
 from services.login import LoginService
 from services.logout import LogoutService
@@ -30,8 +35,6 @@ from utils import (
     RefreshTokenManager,
 )
 
-from config.config import settings
-
 
 # ==============================
 # Autentifikācijas fasāde
@@ -43,7 +46,10 @@ class AuthFacade:
         self,
         session: AsyncSession,
     ):
+        # ==============================
         # Repozitoriji
+        # ==============================
+
         user_repository = UserRepository(
             session
         )
@@ -58,7 +64,26 @@ class AuthFacade:
             )
         )
 
+        audit_log_repository = (
+            AuditLogRepository(
+                session
+            )
+        )
+
+        # ==============================
+        # Audit žurnāla serviss
+        # ==============================
+
+        audit_log_service = AuditLogService(
+            audit_log_repository=(
+                audit_log_repository
+            )
+        )
+
+        # ==============================
         # Utilītas
+        # ==============================
+
         normalizer = DataNormalizer()
 
         password_manager = PasswordManager()
@@ -75,7 +100,10 @@ class AuthFacade:
             RefreshTokenManager()
         )
 
+        # ==============================
         # Reģistrācijas serviss
+        # ==============================
+
         self.registration_service = (
             RegistrationService(
                 user_repository=user_repository,
@@ -85,7 +113,14 @@ class AuthFacade:
             )
         )
 
+        self.registration_service.audit_log_service = (
+            audit_log_service
+        )
+
+        # ==============================
         # Pieslēgšanās serviss
+        # ==============================
+
         self.login_service = LoginService(
             user_repository=user_repository,
             refresh_token_repository=(
@@ -102,7 +137,14 @@ class AuthFacade:
             ),
         )
 
+        self.login_service.audit_log_service = (
+            audit_log_service
+        )
+
+        # ==============================
         # Refresh tokena serviss
+        # ==============================
+
         self.refresh_token_service = (
             RefreshTokenService(
                 user_repository=user_repository,
@@ -119,7 +161,14 @@ class AuthFacade:
             )
         )
 
+        self.refresh_token_service.audit_log_service = (
+            audit_log_service
+        )
+
+        # ==============================
         # Atteikšanās serviss
+        # ==============================
+
         self.logout_service = LogoutService(
             refresh_token_repository=(
                 refresh_token_repository
@@ -129,7 +178,14 @@ class AuthFacade:
             ),
         )
 
+        self.logout_service.audit_log_service = (
+            audit_log_service
+        )
+
+    # ==============================
     # Lietotāja reģistrācija
+    # ==============================
+
     async def register(
         self,
         data: UserCreate,
@@ -139,7 +195,10 @@ class AuthFacade:
             data
         )
 
+    # ==============================
     # Lietotāja pieslēgšanās
+    # ==============================
+
     async def login(
         self,
         data: LoginRequest,
@@ -149,7 +208,10 @@ class AuthFacade:
             data
         )
 
+    # ==============================
     # Refresh tokena rotācija
+    # ==============================
+
     async def refresh(
         self,
         data: RefreshTokenRequest,
@@ -159,7 +221,10 @@ class AuthFacade:
             data
         )
 
+    # ==============================
     # Atteikšanās no pašreizējās sesijas
+    # ==============================
+
     async def logout(
         self,
         data: RefreshTokenRequest,
@@ -169,7 +234,10 @@ class AuthFacade:
             data
         )
 
+    # ==============================
     # Atteikšanās no visām sesijām
+    # ==============================
+
     async def logout_all(
         self,
         user_id: int,

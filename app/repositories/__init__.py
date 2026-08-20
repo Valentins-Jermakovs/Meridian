@@ -5,3 +5,4 @@
 from .user import UserRepository
 from .role import RoleRepository
 from .refresh_token import RefreshTokenRepository
+from .audit_log import AuditLogRepository

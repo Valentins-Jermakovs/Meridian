@@ -4,11 +4,14 @@
 
 from fastapi import HTTPException
 
-from models import User
+from models import (
+    AuditAction,
+    User,
+)
 
 from repositories import (
-    UserRepository, 
-    RoleRepository
+    RoleRepository,
+    UserRepository,
 )
 
 from schemas.user import (
@@ -16,9 +19,11 @@ from schemas.user import (
     UserResponse,
 )
 
+from services import AuditLogService
+
 from utils import (
-    DataNormalizer, 
-    PasswordManager
+    DataNormalizer,
+    PasswordManager,
 )
 
 
@@ -46,6 +51,9 @@ class RegistrationService:
 
         # Paroļu pārvaldnieks
         self.password_manager = password_manager
+
+        # Audit žurnāla serviss
+        self.audit_log_service: AuditLogService | None = None
 
     # Lietotāja reģistrācija
     async def register(
@@ -81,6 +89,19 @@ class RegistrationService:
             )
 
             if existing_user is not None:
+
+                # Neveiksmīga reģistrācija
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=None,
+                        action=AuditAction.REGISTER,
+                        description=(
+                            f"Registration failed: "
+                            f"username '{username}' already exists"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=409,
                     detail="Username already exists",
@@ -94,6 +115,19 @@ class RegistrationService:
             )
 
             if existing_user is not None:
+
+                # Neveiksmīga reģistrācija
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=None,
+                        action=AuditAction.REGISTER,
+                        description=(
+                            f"Registration failed: "
+                            f"email '{email}' already exists"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=409,
                     detail="Email already exists",
@@ -155,6 +189,18 @@ class RegistrationService:
             roles = await self.user_repository.get_roles(
                 user.id
             )
+
+            # Veiksmīgas reģistrācijas ieraksts
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=user.id,
+                    action=AuditAction.REGISTER,
+                    description=(
+                        f"User '{user.username}' "
+                        f"successfully registered"
+                    ),
+                    success=True,
+                )
 
             # Lietotāja atbildes shēmas izveide
             return UserResponse(

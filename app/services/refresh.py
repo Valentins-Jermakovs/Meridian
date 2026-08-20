@@ -6,21 +6,26 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
-from models import RefreshToken
+from models import (
+    AuditAction,
+    RefreshToken,
+)
 
 from repositories import (
-    UserRepository, 
-    RefreshTokenRepository
+    RefreshTokenRepository,
+    UserRepository,
 )
 
 from schemas import (
-    TokenResponse, 
-    RefreshTokenRequest
+    RefreshTokenRequest,
+    TokenResponse,
 )
 
+from services import AuditLogService
+
 from utils import (
-    JWTManager, 
-    RefreshTokenManager
+    JWTManager,
+    RefreshTokenManager,
 )
 
 
@@ -59,6 +64,9 @@ class RefreshTokenService:
             refresh_token_expire_days
         )
 
+        # Audit žurnāla serviss
+        self.audit_log_service: AuditLogService | None = None
+
     # Refresh tokena rotācija
     async def rotate(
         self,
@@ -91,13 +99,23 @@ class RefreshTokenService:
             # Pārbauda, vai tokens jau ir atsaukts
             if stored_token.revoked:
 
-                # Atsauc visus lietotāja tokenus,
-                # jo iespējama tokena atkārtota izmantošana
+                # Iespējama tokena atkārtota izmantošana
                 await self.refresh_token_repository.revoke_all_by_user(
                     stored_token.user_id
                 )
 
                 await self.refresh_token_repository.commit()
+
+                # Audit ieraksts
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=stored_token.user_id,
+                        action=AuditAction.TOKEN_REUSE,
+                        description=(
+                            "Refresh token reuse detected"
+                        ),
+                        success=False,
+                    )
 
                 raise HTTPException(
                     status_code=401,
@@ -107,11 +125,24 @@ class RefreshTokenService:
             # Pārbauda tokena derīguma termiņu
             if stored_token.expires_at <= datetime.now():
 
+                # Tokena atsaukšana
                 await self.refresh_token_repository.revoke(
                     stored_token
                 )
 
+                # Izmaiņu saglabāšana
                 await self.refresh_token_repository.commit()
+
+                # Audit ieraksts
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=stored_token.user_id,
+                        action=AuditAction.REFRESH,
+                        description=(
+                            "Refresh token expired"
+                        ),
+                        success=False,
+                    )
 
                 raise HTTPException(
                     status_code=401,
@@ -124,6 +155,18 @@ class RefreshTokenService:
             )
 
             if user is None:
+                # Audit ieraksts
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=stored_token.user_id,
+                        action=AuditAction.REFRESH,
+                        description=(
+                            "Refresh token rotation failed: "
+                            "user not found"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=401,
                     detail="User not found",
@@ -131,6 +174,19 @@ class RefreshTokenService:
 
             # Pārbauda lietotāja aktivitāti
             if not user.is_active:
+
+                # Audit ieraksts
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=user.id,
+                        action=AuditAction.REFRESH,
+                        description=(
+                            "Refresh token rotation failed: "
+                            "user account is inactive"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=403,
                     detail="User account is inactive",
@@ -194,6 +250,17 @@ class RefreshTokenService:
 
             # Izmaiņu saglabāšana
             await self.refresh_token_repository.commit()
+
+            # Veiksmīgas rotācijas ieraksts
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=user.id,
+                    action=AuditAction.REFRESH,
+                    description=(
+                        "Refresh token rotated successfully"
+                    ),
+                    success=True,
+                )
 
             # Tokenu atgriešana
             return TokenResponse(

@@ -6,11 +6,14 @@ from math import ceil
 
 from fastapi import HTTPException
 
-from models import User
+from models import (
+    AuditAction,
+    User,
+)
 
 from repositories import (
-    UserRepository,
     RoleRepository,
+    UserRepository,
 )
 
 from schemas.user import (
@@ -20,6 +23,8 @@ from schemas.user import (
     UserResponse,
     UserSelfUpdate,
 )
+
+from services import AuditLogService
 
 from utils import (
     DataNormalizer,
@@ -57,7 +62,41 @@ class UserUpdateService:
         # Redis kešatmiņa
         self.redis_cache = redis_cache
 
+        # Audit žurnāla serviss
+        self.audit_log_service: AuditLogService | None = None
+
+    # ==============================
+    # Audit ieraksta izveide
+    # ==============================
+
+    async def _audit(
+        self,
+        user_id: int | None,
+        action: AuditAction,
+        description: str,
+        success: bool,
+    ) -> None:
+
+        if self.audit_log_service is None:
+            return
+
+        try:
+            await self.audit_log_service.create(
+                user_id=user_id,
+                action=action,
+                description=description,
+                success=success,
+            )
+
+        except Exception:
+            # Audit kļūda nedrīkst ietekmēt
+            # galveno lietotāja darbību
+            pass
+
+    # ==============================
     # Lietotāja atbildes shēmas izveide
+    # ==============================
+
     async def _build_user_response(
         self,
         user: User,
@@ -83,7 +122,10 @@ class UserUpdateService:
             created_at=user.created_at,
         )
 
+    # ==============================
     # Lietotāja meklēšana pēc ID
+    # ==============================
+
     async def get_by_id(
         self,
         user_id: int,
@@ -128,7 +170,10 @@ class UserUpdateService:
 
         return response
 
+    # ==============================
     # Lietotāja datu atjaunošana
+    # ==============================
+
     async def _update_user(
         self,
         user: User,
@@ -141,6 +186,7 @@ class UserUpdateService:
 
         # Lietotājvārda atjaunošana
         if username is not None:
+
             username = (
                 self.normalizer.normalize_username(
                     username
@@ -148,6 +194,7 @@ class UserUpdateService:
             )
 
             if username != user.username:
+
                 existing_user = (
                     await self.user_repository.get_by_username(
                         username
@@ -164,6 +211,7 @@ class UserUpdateService:
 
         # Pilnā vārda atjaunošana
         if full_name is not None:
+
             user.full_name = (
                 self.normalizer.normalize_text(
                     full_name
@@ -172,6 +220,7 @@ class UserUpdateService:
 
         # E-pasta atjaunošana
         if email is not None:
+
             email = (
                 self.normalizer.normalize_email(
                     email
@@ -179,6 +228,7 @@ class UserUpdateService:
             )
 
             if email != str(user.email):
+
                 existing_user = (
                     await self.user_repository.get_by_email(
                         email
@@ -195,6 +245,7 @@ class UserUpdateService:
 
         # Paroles atjaunošana
         if password is not None:
+
             user.password_hash = (
                 self.password_manager.hash_password(
                     password
@@ -203,11 +254,15 @@ class UserUpdateService:
 
         # Konta aktivitātes statusa atjaunošana
         if is_active is not None:
+
             user.is_active = is_active
 
         return user
 
+    # ==============================
     # Lietotāju meklēšana ar lapošanu
+    # ==============================
+
     async def search(
         self,
         query: str | None = None,
@@ -229,7 +284,7 @@ class UserUpdateService:
                 detail="Page size must be greater than 0",
             )
 
-        # Maksimālais rezultātu skaits vienā lapā
+        # Maksimālais lietotāju skaits vienā lapā
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
@@ -238,6 +293,7 @@ class UserUpdateService:
 
         # Meklēšanas teksta normalizācija
         if query is not None:
+
             query = self.normalizer.normalize_text(
                 query
             )
@@ -308,7 +364,11 @@ class UserUpdateService:
 
         return response
 
-    # Lietotāja atjaunošana administratora režīmā
+    # ==============================
+    # Lietotāja atjaunošana
+    # administratora režīmā
+    # ==============================
+
     async def update_by_admin(
         self,
         admin_id: int,
@@ -335,6 +395,9 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
+            # Lietotāja sākotnējais statuss
+            old_is_active = user.is_active
+
             # Lietotāja datu atjaunošana
             user = await self._update_user(
                 user=user,
@@ -352,29 +415,34 @@ class UserUpdateService:
             # Lietotāja lomu atjaunošana
             if data.roles is not None:
 
+                # Normalizē lomu nosaukumus
                 role_names = [
                     role.strip().lower()
                     for role in data.roles
                 ]
 
+                # Pārbauda, vai nav tukšas lomas
                 if not role_names:
                     raise HTTPException(
                         status_code=400,
                         detail="At least one role is required",
                     )
 
+                # Noņem dublikātus
                 role_names = list(
                     dict.fromkeys(
                         role_names
                     )
                 )
 
+                # Atrod lomas datu bāzē
                 roles = (
                     await self.role_repository.get_by_names(
                         role_names
                     )
                 )
 
+                # Pārbauda, vai visas lomas eksistē
                 found_role_names = {
                     role.name
                     for role in roles
@@ -395,12 +463,14 @@ class UserUpdateService:
                         ),
                     )
 
+                # ID atrastajām lomām
                 role_ids = [
                     role.id
                     for role in roles
                     if role.id is not None
                 ]
 
+                # Lomu sinhronizācija
                 await self.user_repository.set_roles(
                     user_id=user.id,
                     role_ids=role_ids,
@@ -424,22 +494,109 @@ class UserUpdateService:
                 "users:search:*"
             )
 
+            # Veiksmīgs administratora atjauninājums
+            await self._audit(
+                user_id=admin_id,
+                action=AuditAction.ADMIN_UPDATE_USER,
+                description=(
+                    f"Administrator updated user "
+                    f"'{user.username}'"
+                ),
+                success=True,
+            )
+
+            # Lomu maiņas ieraksts
+            if data.roles is not None:
+
+                await self._audit(
+                    user_id=admin_id,
+                    action=AuditAction.CHANGE_ROLE,
+                    description=(
+                        f"Administrator changed roles "
+                        f"for user '{user.username}'"
+                    ),
+                    success=True,
+                )
+
+            # Konta statusa maiņas ieraksts
+            if (
+                data.is_active is not None
+                and old_is_active != user.is_active
+            ):
+
+                action = (
+                    AuditAction.ACCOUNT_ACTIVATED
+                    if user.is_active
+                    else AuditAction.ACCOUNT_DEACTIVATED
+                )
+
+                await self._audit(
+                    user_id=admin_id,
+                    action=action,
+                    description=(
+                        f"Administrator changed account "
+                        f"status for user "
+                        f"'{user.username}'"
+                    ),
+                    success=True,
+                )
+
+            # Paroles maiņas ieraksts
+            if data.password is not None:
+
+                await self._audit(
+                    user_id=admin_id,
+                    action=AuditAction.CHANGE_PASSWORD,
+                    description=(
+                        f"Administrator changed password "
+                        f"for user '{user.username}'"
+                    ),
+                    success=True,
+                )
+
+            # Lietotāja atbildes izveide
             return await self._build_user_response(
                 user
             )
 
-        except HTTPException:
+        except HTTPException as exception:
+
+            # Viena neveiksmīga administratora darbība
+            await self._audit(
+                user_id=admin_id,
+                action=AuditAction.ADMIN_UPDATE_USER,
+                description=(
+                    f"Administrator update failed: "
+                    f"{exception.detail}"
+                ),
+                success=False,
+            )
+
             raise
 
         except Exception:
+
             await self.user_repository.rollback()
+
+            await self._audit(
+                user_id=admin_id,
+                action=AuditAction.ADMIN_UPDATE_USER,
+                description=(
+                    "Administrator update failed "
+                    "because of an unexpected error"
+                ),
+                success=False,
+            )
 
             raise HTTPException(
                 status_code=500,
                 detail="Failed to update user",
             )
 
+    # ==============================
     # Paša lietotāja datu atjaunošana
+    # ==============================
+
     async def update_self(
         self,
         user_id: int,
@@ -461,12 +618,14 @@ class UserUpdateService:
             # Paroles pārbaude
             if data.password is not None:
 
+                # Pašreizējā parole nav norādīta
                 if data.current_password is None:
                     raise HTTPException(
                         status_code=400,
                         detail="Current password is required",
                     )
 
+                # Pašreizējā parole nav pareiza
                 if not self.password_manager.verify_password(
                     data.current_password,
                     user.password_hash,
@@ -507,15 +666,62 @@ class UserUpdateService:
                 "users:search:*"
             )
 
+            # Veiksmīgs atjauninājums
+            await self._audit(
+                user_id=user.id,
+                action=AuditAction.UPDATE_SELF,
+                description=(
+                    f"User '{user.username}' "
+                    "updated own profile"
+                ),
+                success=True,
+            )
+
+            # Paroles maiņas ieraksts
+            if data.password is not None:
+                await self._audit(
+                    user_id=user.id,
+                    action=AuditAction.CHANGE_PASSWORD,
+                    description=(
+                        f"User '{user.username}' "
+                        "changed own password"
+                    ),
+                    success=True,
+                )
+
+            # Lietotāja atbildes izveide
             return await self._build_user_response(
                 user
             )
 
-        except HTTPException:
+        except HTTPException as exception:
+
+            # Viena neveiksmīga pašatjaunināšana
+            await self._audit(
+                user_id=user_id,
+                action=AuditAction.UPDATE_SELF,
+                description=(
+                    f"User update failed: "
+                    f"{exception.detail}"
+                ),
+                success=False,
+            )
+
             raise
 
         except Exception:
+
             await self.user_repository.rollback()
+
+            await self._audit(
+                user_id=user_id,
+                action=AuditAction.UPDATE_SELF,
+                description=(
+                    "User update failed "
+                    "because of an unexpected error"
+                ),
+                success=False,
+            )
 
             raise HTTPException(
                 status_code=500,

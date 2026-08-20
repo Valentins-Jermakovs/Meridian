@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from repositories import (
     UserRepository,
     RoleRepository,
+    AuditLogRepository,
 )
 
 from schemas import (
@@ -15,6 +16,8 @@ from schemas import (
     UserResponse,
     UserSelfUpdate,
 )
+
+from services import AuditLogService
 
 from services.user import UserUpdateService
 
@@ -36,7 +39,10 @@ class UserFacade:
         session: AsyncSession,
         redis_cache: RedisCache,
     ):
+        # ==============================
         # Repozitoriji
+        # ==============================
+
         user_repository = UserRepository(
             session
         )
@@ -45,12 +51,34 @@ class UserFacade:
             session
         )
 
+        audit_log_repository = (
+            AuditLogRepository(
+                session
+            )
+        )
+
+        # ==============================
+        # Audit žurnāla serviss
+        # ==============================
+
+        audit_log_service = AuditLogService(
+            audit_log_repository=(
+                audit_log_repository
+            )
+        )
+
+        # ==============================
         # Utilītas
+        # ==============================
+
         normalizer = DataNormalizer()
 
         password_manager = PasswordManager()
 
+        # ==============================
         # Lietotāja serviss
+        # ==============================
+
         self.user_service = UserUpdateService(
             user_repository=user_repository,
             role_repository=role_repository,
@@ -59,7 +87,15 @@ class UserFacade:
             redis_cache=redis_cache,
         )
 
+        # Audit servisa piesaiste
+        self.user_service.audit_log_service = (
+            audit_log_service
+        )
+
+    # ==============================
     # Lietotāja iegūšana pēc ID
+    # ==============================
+
     async def get_by_id(
         self,
         user_id: int,
@@ -69,7 +105,10 @@ class UserFacade:
             user_id
         )
 
+    # ==============================
     # Lietotāju meklēšana
+    # ==============================
+
     async def search(
         self,
         query: str | None = None,
@@ -83,7 +122,11 @@ class UserFacade:
             page_size=page_size,
         )
 
-    # Administratora lietotāja atjaunošana
+    # ==============================
+    # Administratora lietotāja
+    # atjaunošana
+    # ==============================
+
     async def update_by_admin(
         self,
         admin_id: int,
@@ -97,7 +140,10 @@ class UserFacade:
             data=data,
         )
 
-    # Paša lietotāja atjaunošana
+    # ==============================
+    # Paša lietotāja datu atjaunošana
+    # ==============================
+
     async def update_self(
         self,
         user_id: int,

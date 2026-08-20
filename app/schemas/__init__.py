@@ -21,3 +21,5 @@ from .user import (
 )
 
 from .metrics import SystemMetricsResponse
+
+from .audit import AuditLogListItem, AuditLogListResponse

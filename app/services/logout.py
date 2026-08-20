@@ -4,9 +4,13 @@
 
 from fastapi import HTTPException
 
+from models import AuditAction
+
 from repositories import RefreshTokenRepository
 
 from schemas import RefreshTokenRequest
+
+from services import AuditLogService
 
 from utils import RefreshTokenManager
 
@@ -32,6 +36,9 @@ class LogoutService:
             refresh_token_manager
         )
 
+        # Audit žurnāla serviss
+        self.audit_log_service: AuditLogService | None = None
+
     # Atteikšanās no pašreizējās sesijas
     async def logout(
         self,
@@ -55,6 +62,18 @@ class LogoutService:
 
             # Tokens nav atrasts
             if refresh_token is None:
+
+                # Neveiksmīga atteikšanās
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=None,
+                        action=AuditAction.LOGOUT,
+                        description=(
+                            "Logout failed: invalid refresh token"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=401,
                     detail="Invalid refresh token",
@@ -62,6 +81,19 @@ class LogoutService:
 
             # Tokens jau ir atsaukts
             if refresh_token.revoked:
+
+                # Neveiksmīga atteikšanās
+                if self.audit_log_service is not None:
+                    await self.audit_log_service.create(
+                        user_id=refresh_token.user_id,
+                        action=AuditAction.LOGOUT,
+                        description=(
+                            "Logout failed: "
+                            "refresh token already revoked"
+                        ),
+                        success=False,
+                    )
+
                 raise HTTPException(
                     status_code=401,
                     detail="Refresh token already revoked",
@@ -74,6 +106,17 @@ class LogoutService:
 
             # Izmaiņu saglabāšana
             await self.refresh_token_repository.commit()
+
+            # Veiksmīgas atteikšanās ieraksts
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=refresh_token.user_id,
+                    action=AuditAction.LOGOUT,
+                    description=(
+                        "User successfully logged out"
+                    ),
+                    success=True,
+                )
 
         except HTTPException:
             raise
@@ -100,6 +143,18 @@ class LogoutService:
 
             # Izmaiņu saglabāšana
             await self.refresh_token_repository.commit()
+
+            # Veiksmīgas atteikšanās ieraksts
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=user_id,
+                    action=AuditAction.LOGOUT_ALL,
+                    description=(
+                        "User successfully logged out "
+                        "from all sessions"
+                    ),
+                    success=True,
+                )
 
         except Exception:
             await self.refresh_token_repository.rollback()

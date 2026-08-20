@@ -6,24 +6,28 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
-from models import RefreshToken
+from models import (
+    AuditAction,
+    RefreshToken,
+)
 
 from repositories import (
-    UserRepository, 
-    RefreshTokenRepository
+    RefreshTokenRepository,
+    UserRepository,
 )
-
 
 from schemas import (
-    LoginRequest, 
-    TokenResponse
+    LoginRequest,
+    TokenResponse,
 )
 
+from services import AuditLogService
+
 from utils import (
-    DataNormalizer, 
-    PasswordManager, 
-    JWTManager, 
-    RefreshTokenManager
+    DataNormalizer,
+    JWTManager,
+    PasswordManager,
+    RefreshTokenManager,
 )
 
 
@@ -70,6 +74,9 @@ class LoginService:
             refresh_token_expire_days
         )
 
+        # Audit žurnāla serviss
+        self.audit_log_service: AuditLogService | None = None
+
     # Lietotāja pieslēgšanās
     async def login(
         self,
@@ -101,8 +108,20 @@ class LoginService:
                 email
             )
 
-        # Nepareizi autentifikācijas dati
+        # Lietotājs nav atrasts
         if user is None:
+
+            # Neveiksmīga pieslēgšanās
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=None,
+                    action=AuditAction.FAILED_LOGIN,
+                    description=(
+                        f"Failed login attempt for '{login}'"
+                    ),
+                    success=False,
+                )
+
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -110,6 +129,19 @@ class LoginService:
 
         # Pārbauda lietotāja aktivitāti
         if not user.is_active:
+
+            # Neveiksmīga pieslēgšanās
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=user.id,
+                    action=AuditAction.FAILED_LOGIN,
+                    description=(
+                        f"Login attempt for inactive user "
+                        f"'{user.username}'"
+                    ),
+                    success=False,
+                )
+
             raise HTTPException(
                 status_code=403,
                 detail="User account is inactive",
@@ -120,6 +152,19 @@ class LoginService:
             data.password,
             user.password_hash,
         ):
+
+            # Neveiksmīga pieslēgšanās
+            if self.audit_log_service is not None:
+                await self.audit_log_service.create(
+                    user_id=user.id,
+                    action=AuditAction.FAILED_LOGIN,
+                    description=(
+                        f"Invalid password for user "
+                        f"'{user.username}'"
+                    ),
+                    success=False,
+                )
+
             raise HTTPException(
                 status_code=401,
                 detail="Invalid credentials",
@@ -187,6 +232,17 @@ class LoginService:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to create refresh token",
+            )
+
+        # Veiksmīgas pieslēgšanās ieraksts
+        if self.audit_log_service is not None:
+            await self.audit_log_service.create(
+                user_id=user.id,
+                action=AuditAction.LOGIN,
+                description=(
+                    f"User '{user.username}' successfully logged in"
+                ),
+                success=True,
             )
 
         # Tokenu atgriešana
