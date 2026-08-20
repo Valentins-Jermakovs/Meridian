@@ -71,6 +71,28 @@ class UserUpdateService:
             created_at=user.created_at,
         )
 
+    # Lietotāja meklēšana pēc ID
+    async def get_by_id(
+        self,
+        user_id: int,
+    ) -> UserResponse:
+
+        # Lietotāja meklēšana
+        user = await self.user_repository.get_by_id(
+            user_id
+        )
+
+        if user is None:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found",
+            )
+
+        # Lietotāja atbildes izveide
+        return await self._build_user_response(
+            user
+        )
+
     # Lietotāja datu atjaunošana
     async def _update_user(
         self,

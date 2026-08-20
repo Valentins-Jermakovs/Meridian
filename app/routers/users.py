@@ -78,6 +78,59 @@ async def search_users(
     )
 
 
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+)
+async def get_current_user(
+    current_user: dict = Depends(
+        jwt_auth.get_current_user
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    facade = UserFacade(session)
+
+    user_id = int(
+        current_user["sub"]
+    )
+
+    return await facade.get_by_id(
+        user_id
+    )
+
+
+# ==============================
+# Paša lietotāja atjaunošana
+# ==============================
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+)
+async def update_current_user(
+    data: UserSelfUpdate,
+    current_user: dict = Depends(
+        jwt_auth.get_current_user
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    facade = UserFacade(session)
+
+    user_id = int(
+        current_user["sub"]
+    )
+
+    return await facade.update_self(
+        user_id=user_id,
+        data=data,
+    )
+
+
 # ==============================
 # Lietotāja atjaunošana
 # administratora režīmā
@@ -107,35 +160,6 @@ async def update_user_by_admin(
 
     return await facade.update_by_admin(
         admin_id=admin_id,
-        user_id=user_id,
-        data=data,
-    )
-
-
-# ==============================
-# Paša lietotāja atjaunošana
-# ==============================
-
-@router.patch(
-    "/me",
-    response_model=UserResponse,
-)
-async def update_current_user(
-    data: UserSelfUpdate,
-    current_user: dict = Depends(
-        jwt_auth.get_current_user
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    facade = UserFacade(session)
-
-    user_id = int(
-        current_user["sub"]
-    )
-
-    return await facade.update_self(
         user_id=user_id,
         data=data,
     )

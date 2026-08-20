@@ -48,6 +48,16 @@ class UserFacade:
             password_manager=password_manager,
         )
 
+    # Lietotāja iegūšana pēc ID
+    async def get_by_id(
+        self,
+        user_id: int,
+    ) -> UserResponse:
+
+        return await self.user_service.get_by_id(
+            user_id
+        )
+
     # Lietotāju meklēšana
     async def search(
         self,
