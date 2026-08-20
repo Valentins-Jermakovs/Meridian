@@ -59,6 +59,13 @@ class UserSelfUpdate(SQLModel):
     # E-pasta adrese
     email: EmailStr | None = None
 
+    # Pašreizējā parole
+    current_password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
     # Jaunā parole
     password: str | None = Field(
         default=None,

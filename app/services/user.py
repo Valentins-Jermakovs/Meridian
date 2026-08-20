@@ -329,6 +329,27 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
+            # Ja tiek mainīta parole,
+            # jāpārbauda pašreizējā parole
+            if data.password is not None:
+
+                # Pašreizējā parole nav norādīta
+                if data.current_password is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Current password is required",
+                    )
+
+                # Pašreizējā parole nav pareiza
+                if not self.password_manager.verify_password(
+                    data.current_password,
+                    user.password_hash,
+                ):
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Current password is incorrect",
+                    )
+
             # Lietotāja datu atjaunošana
             user = await self._update_user(
                 user=user,
@@ -344,7 +365,7 @@ class UserUpdateService:
 
             # Lietotāja saglabāšana
             user = await self.user_repository.update(
-                user
+            user
             )
 
             # Izmaiņu saglabāšana

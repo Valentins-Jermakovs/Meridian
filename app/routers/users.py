@@ -132,6 +132,33 @@ async def update_current_user(
 
 
 # ==============================
+# Lietotāja informācija
+# administratora režīmā
+# ==============================
+
+@router.get(
+    "/{user_id}",
+    response_model=UserResponse,
+)
+async def get_user_by_id(
+    user_id: int,
+    current_user: dict = Depends(
+        jwt_auth.require_roles(
+            ["admin"]
+        )
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    facade = UserFacade(session)
+
+    return await facade.get_by_id(
+        user_id
+    )
+
+
+# ==============================
 # Lietotāja atjaunošana
 # administratora režīmā
 # ==============================
