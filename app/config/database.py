@@ -2,6 +2,8 @@
 # Bibliotēku imports
 # ==============================
 
+from collections.abc import AsyncGenerator
+
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -38,6 +40,15 @@ engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=True,
 )
+
+
+# ==============================
+# Datu bāzes sesija
+# ==============================
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSession(engine) as session:
+        yield session
 
 
 # ==============================
