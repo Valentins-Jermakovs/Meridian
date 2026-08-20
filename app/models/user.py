@@ -4,9 +4,8 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-
+from pydantic import EmailStr
 from sqlmodel import Field, Relationship, SQLModel
-
 from .user_role import UserRole
 
 if TYPE_CHECKING:
@@ -41,7 +40,7 @@ class User(SQLModel, table=True):
     )
 
     # Lietotāja e-pasta adrese
-    email: str = Field(
+    email: EmailStr = Field(
         unique=True,
         index=True,
         max_length=255,
