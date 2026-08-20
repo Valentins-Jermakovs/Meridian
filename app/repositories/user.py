@@ -3,7 +3,7 @@
 # ==============================
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, func
+from sqlmodel import delete, func, select
 
 from models import User, UserRole, Role
 
@@ -182,3 +182,28 @@ class UserRepository:
         await self.session.flush()
 
         return user_role
+
+    # Lietotāja lomu atjaunošana
+    async def set_roles(
+        self,
+        user_id: int,
+        role_ids: list[int],
+    ) -> None:
+
+        # Esošo lomu dzēšana
+        await self.session.execute(
+            delete(UserRole).where(
+                UserRole.user_id == user_id
+            )
+        )
+
+        # Jauno lomu pievienošana
+        for role_id in role_ids:
+            self.session.add(
+                UserRole(
+                    user_id=user_id,
+                    role_id=role_id,
+                )
+            )
+
+        await self.session.flush()

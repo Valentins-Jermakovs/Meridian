@@ -108,6 +108,9 @@ class UserAdminUpdate(SQLModel):
     # Konta aktivitātes statuss
     is_active: bool | None = None
 
+    # Lietotāja lomas
+    roles: list[str] | None = None
+
 
 # ==============================
 # Lietotāja pilnā atbildes shēma

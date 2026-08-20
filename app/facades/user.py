@@ -4,7 +4,10 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from repositories import UserRepository
+from repositories import (
+    UserRepository,
+    RoleRepository,
+)
 
 from schemas import (
     UserAdminUpdate,
@@ -31,8 +34,12 @@ class UserFacade:
         self,
         session: AsyncSession,
     ):
-        # Lietotāja repozitorijs
+        # Repozitoriji
         user_repository = UserRepository(
+            session
+        )
+
+        role_repository = RoleRepository(
             session
         )
 
@@ -44,6 +51,7 @@ class UserFacade:
         # Lietotāja serviss
         self.user_service = UserUpdateService(
             user_repository=user_repository,
+            role_repository=role_repository,
             normalizer=normalizer,
             password_manager=password_manager,
         )

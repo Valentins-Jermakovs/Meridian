@@ -8,7 +8,10 @@ from fastapi import HTTPException
 
 from models import User
 
-from repositories import UserRepository
+from repositories import (
+    UserRepository,
+    RoleRepository,
+)
 
 from schemas.user import (
     UserAdminUpdate,
@@ -19,8 +22,8 @@ from schemas.user import (
 )
 
 from utils import (
-    DataNormalizer, 
-    PasswordManager
+    DataNormalizer,
+    PasswordManager,
 )
 
 
@@ -33,11 +36,15 @@ class UserUpdateService:
     def __init__(
         self,
         user_repository: UserRepository,
+        role_repository: RoleRepository,
         normalizer: DataNormalizer,
         password_manager: PasswordManager,
     ):
         # Lietotāja repozitorijs
         self.user_repository = user_repository
+
+        # Lomas repozitorijs
+        self.role_repository = role_repository
 
         # Datu normalizators
         self.normalizer = normalizer
@@ -77,7 +84,6 @@ class UserUpdateService:
         user_id: int,
     ) -> UserResponse:
 
-        # Lietotāja meklēšana
         user = await self.user_repository.get_by_id(
             user_id
         )
@@ -88,7 +94,6 @@ class UserUpdateService:
                 detail="User not found",
             )
 
-        # Lietotāja atbildes izveide
         return await self._build_user_response(
             user
         )
@@ -180,28 +185,24 @@ class UserUpdateService:
         page_size: int = 20,
     ) -> UserListResponse:
 
-        # Lappuses validācija
         if page < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page must be greater than 0",
             )
 
-        # Lapas izmēra validācija
         if page_size < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page size must be greater than 0",
             )
 
-        # Maksimālais rezultātu skaits vienā lapā
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
                 detail="Page size cannot exceed 100",
             )
 
-        # Meklēšanas teksta normalizācija
         if query is not None:
             query = self.normalizer.normalize_text(
                 query
@@ -210,7 +211,6 @@ class UserUpdateService:
             if not query:
                 query = None
 
-        # Meklēšana
         users, total = (
             await self.user_repository.search(
                 query=query,
@@ -219,7 +219,6 @@ class UserUpdateService:
             )
         )
 
-        # Lietotāju saraksta izveide
         items = [
             UserListItem(
                 id=user.id,
@@ -232,7 +231,6 @@ class UserUpdateService:
             if user.id is not None
         ]
 
-        # Kopējais lapu skaits
         pages = ceil(
             total / page_size
         )
@@ -254,7 +252,7 @@ class UserUpdateService:
     ) -> UserResponse:
 
         try:
-            # Pārbauda, vai administrators nemēģina atjaunot pats sevi
+            # Administrators nevar atjaunot pats sevi
             if admin_id == user_id:
                 raise HTTPException(
                     status_code=403,
@@ -286,6 +284,70 @@ class UserUpdateService:
                 is_active=data.is_active,
             )
 
+            # Lietotāja lomu atjaunošana
+            if data.roles is not None:
+
+                # Normalizē lomu nosaukumus
+                role_names = [
+                    role.strip().lower()
+                    for role in data.roles
+                ]
+
+                # Pārbauda, vai nav tukšas lomas
+                if not role_names:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="At least one role is required",
+                    )
+
+                # Noņem dublikātus
+                role_names = list(
+                    dict.fromkeys(
+                        role_names
+                    )
+                )
+
+                # Atrod lomas datu bāzē
+                roles = (
+                    await self.role_repository.get_by_names(
+                        role_names
+                    )
+                )
+
+                # Pārbauda, vai visas lomas eksistē
+                found_role_names = {
+                    role.name
+                    for role in roles
+                }
+
+                missing_roles = [
+                    role
+                    for role in role_names
+                    if role not in found_role_names
+                ]
+
+                if missing_roles:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=(
+                            "Roles not found: "
+                            + ", ".join(missing_roles)
+                        ),
+                    )
+
+                # ID der atrastajām lomām
+                role_ids = [
+                    role.id
+                    for role in roles
+                    if role.id is not None
+                ]
+
+                # Lomu sinhronizācija
+                await self.user_repository.set_roles(
+                    user_id=user.id,
+                    role_ids=role_ids,
+                )
+
             # Lietotāja saglabāšana
             user = await self.user_repository.update(
                 user
@@ -294,7 +356,6 @@ class UserUpdateService:
             # Izmaiņu saglabāšana
             await self.user_repository.commit()
 
-            # Lietotāja atbildes izveide
             return await self._build_user_response(
                 user
             )
@@ -318,7 +379,6 @@ class UserUpdateService:
     ) -> UserResponse:
 
         try:
-            # Lietotāja meklēšana
             user = await self.user_repository.get_by_id(
                 user_id
             )
@@ -329,18 +389,14 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
-            # Ja tiek mainīta parole,
-            # jāpārbauda pašreizējā parole
             if data.password is not None:
 
-                # Pašreizējā parole nav norādīta
                 if data.current_password is None:
                     raise HTTPException(
                         status_code=400,
                         detail="Current password is required",
                     )
 
-                # Pašreizējā parole nav pareiza
                 if not self.password_manager.verify_password(
                     data.current_password,
                     user.password_hash,
@@ -350,7 +406,6 @@ class UserUpdateService:
                         detail="Current password is incorrect",
                     )
 
-            # Lietotāja datu atjaunošana
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -363,15 +418,12 @@ class UserUpdateService:
                 password=data.password,
             )
 
-            # Lietotāja saglabāšana
             user = await self.user_repository.update(
-            user
+                user
             )
 
-            # Izmaiņu saglabāšana
             await self.user_repository.commit()
 
-            # Lietotāja atbildes izveide
             return await self._build_user_response(
                 user
             )

@@ -34,3 +34,18 @@ class RoleRepository:
         )
 
         return result.scalar_one_or_none()
+
+
+    # Vairāku lomu meklēšana pēc nosaukumiem
+    async def get_by_names(
+        self,
+        names: list[str],
+    ) -> list[Role]:
+
+        result = await self.session.execute(
+            select(Role).where(
+                Role.name.in_(names)
+            )
+        )
+
+        return list(result.scalars().all())
