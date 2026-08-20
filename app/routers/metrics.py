@@ -90,30 +90,37 @@ async def metrics_websocket(
     # Savienojuma pieņemšana
     await websocket.accept()
 
+    # Pašreizējais FastAPI/Uvicorn process
+    process = psutil.Process()
+
     try:
         while True:
-            # CPU
-            cpu_percent = psutil.cpu_percent()
+            # CPU izmantošana
+            cpu_percent = process.cpu_percent()
 
-            # Atmiņa
-            memory = psutil.virtual_memory()
+            # Procesa atmiņa
+            memory = process.memory_info()
 
             data: SystemMetricsResponse = {
                 "cpu_percent": cpu_percent,
-                "memory_percent": memory.percent,
+
+                "memory_percent": round(
+                    process.memory_percent(),
+                    2,
+                ),
+
                 "memory_used_mb": round(
-                    memory.used
-                    / 1024
-                    / 1024
+                    memory.rss / (1024 ** 2)
                 ),
             }
 
             # Metriku nosūtīšana klientam
-            await websocket.send_json(data)
+            await websocket.send_json(
+                data
+            )
 
             # Metriku atjaunošana katru sekundi
             await asyncio.sleep(1)
 
     except WebSocketDisconnect:
-        # Klients aizvēra savienojumu
         pass
