@@ -2,6 +2,8 @@
 # Bibliotēku imports
 # ==============================
 
+import asyncio
+
 from argon2 import PasswordHasher
 
 
@@ -11,20 +13,30 @@ from argon2 import PasswordHasher
 
 class PasswordManager:
 
-    def __init__(self):
+    def __init__(
+        self,
+    ):
         # Argon2 paroļu hešēšanas objekts
         self.hasher = PasswordHasher()
 
+    # ==============================
     # Paroles hešošana
+    # ==============================
+
     def hash_password(
         self,
         password: str,
     ) -> str:
 
-        return self.hasher.hash(password)
+        return self.hasher.hash(
+            password
+        )
 
-    # Paroles pārbaude pret hešu
-    def verify_password(
+    # ==============================
+    # Sinhronā paroles pārbaude
+    # ==============================
+
+    def _verify_password(
         self,
         password: str,
         password_hash: str,
@@ -38,3 +50,19 @@ class PasswordManager:
 
         except Exception:
             return False
+
+    # ==============================
+    # Asinhronā paroles pārbaude
+    # ==============================
+
+    async def verify_password(
+        self,
+        password: str,
+        password_hash: str,
+    ) -> bool:
+
+        return await asyncio.to_thread(
+            self._verify_password,
+            password,
+            password_hash,
+        )

@@ -29,6 +29,7 @@ class User(SQLModel, table=True):
     # Lietotājvārds
     username: str = Field(
         unique=True,
+        index=True,
         min_length=5,
         max_length=100,
     )

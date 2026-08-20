@@ -379,6 +379,17 @@ class UserUpdateService:
         try:
             # Administrators nevar atjaunot pats sevi
             if admin_id == user_id:
+
+                await self._audit(
+                    user_id=admin_id,
+                    action=AuditAction.ADMIN_UPDATE_USER,
+                    description=(
+                        "Administrator update failed: "
+                        "administrator cannot update themselves"
+                    ),
+                    success=False,
+                )
+
                 raise HTTPException(
                     status_code=403,
                     detail="Administrator cannot update themselves",
@@ -390,6 +401,17 @@ class UserUpdateService:
             )
 
             if user is None:
+
+                await self._audit(
+                    user_id=admin_id,
+                    action=AuditAction.ADMIN_UPDATE_USER,
+                    description=(
+                        f"Administrator update failed: "
+                        f"user with ID {user_id} not found"
+                    ),
+                    success=False,
+                )
+
                 raise HTTPException(
                     status_code=404,
                     detail="User not found",
@@ -423,6 +445,18 @@ class UserUpdateService:
 
                 # Pārbauda, vai nav tukšas lomas
                 if not role_names:
+
+                    await self._audit(
+                        user_id=admin_id,
+                        action=AuditAction.CHANGE_ROLE,
+                        description=(
+                            f"Role update failed for "
+                            f"user '{user.username}': "
+                            "at least one role is required"
+                        ),
+                        success=False,
+                    )
+
                     raise HTTPException(
                         status_code=400,
                         detail="At least one role is required",
@@ -455,6 +489,19 @@ class UserUpdateService:
                 ]
 
                 if missing_roles:
+
+                    await self._audit(
+                        user_id=admin_id,
+                        action=AuditAction.CHANGE_ROLE,
+                        description=(
+                            f"Role update failed for "
+                            f"user '{user.username}': "
+                            f"roles not found: "
+                            f"{', '.join(missing_roles)}"
+                        ),
+                        success=False,
+                    )
+
                     raise HTTPException(
                         status_code=404,
                         detail=(
@@ -559,19 +606,7 @@ class UserUpdateService:
                 user
             )
 
-        except HTTPException as exception:
-
-            # Viena neveiksmīga administratora darbība
-            await self._audit(
-                user_id=admin_id,
-                action=AuditAction.ADMIN_UPDATE_USER,
-                description=(
-                    f"Administrator update failed: "
-                    f"{exception.detail}"
-                ),
-                success=False,
-            )
-
+        except HTTPException:
             raise
 
         except Exception:
@@ -610,6 +645,17 @@ class UserUpdateService:
             )
 
             if user is None:
+
+                await self._audit(
+                    user_id=user_id,
+                    action=AuditAction.UPDATE_SELF,
+                    description=(
+                        "User update failed: "
+                        "user not found"
+                    ),
+                    success=False,
+                )
+
                 raise HTTPException(
                     status_code=404,
                     detail="User not found",
@@ -620,16 +666,45 @@ class UserUpdateService:
 
                 # Pašreizējā parole nav norādīta
                 if data.current_password is None:
+
+                    await self._audit(
+                        user_id=user.id,
+                        action=AuditAction.UPDATE_SELF,
+                        description=(
+                            f"User '{user.username}' "
+                            "update failed: "
+                            "current password is required"
+                        ),
+                        success=False,
+                    )
+
                     raise HTTPException(
                         status_code=400,
                         detail="Current password is required",
                     )
 
-                # Pašreizējā parole nav pareiza
-                if not self.password_manager.verify_password(
-                    data.current_password,
-                    user.password_hash,
-                ):
+                # Pašreizējā parole
+                # tiek pārbaudīta asinhroni
+                password_valid = (
+                    await self.password_manager.verify_password(
+                        data.current_password,
+                        user.password_hash,
+                    )
+                )
+
+                if not password_valid:
+
+                    await self._audit(
+                        user_id=user.id,
+                        action=AuditAction.UPDATE_SELF,
+                        description=(
+                            f"User '{user.username}' "
+                            "update failed: "
+                            "current password is incorrect"
+                        ),
+                        success=False,
+                    )
+
                     raise HTTPException(
                         status_code=401,
                         detail="Current password is incorrect",
@@ -679,6 +754,7 @@ class UserUpdateService:
 
             # Paroles maiņas ieraksts
             if data.password is not None:
+
                 await self._audit(
                     user_id=user.id,
                     action=AuditAction.CHANGE_PASSWORD,
@@ -694,19 +770,7 @@ class UserUpdateService:
                 user
             )
 
-        except HTTPException as exception:
-
-            # Viena neveiksmīga pašatjaunināšana
-            await self._audit(
-                user_id=user_id,
-                action=AuditAction.UPDATE_SELF,
-                description=(
-                    f"User update failed: "
-                    f"{exception.detail}"
-                ),
-                success=False,
-            )
-
+        except HTTPException:
             raise
 
         except Exception:
