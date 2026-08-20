@@ -55,7 +55,7 @@ class JWTManager:
             algorithm=self.algorithm,
         )
 
-    # JWT tokena dekodēšana
+    # Access tokena dekodēšana
     def decode_access_token(
         self,
         token: str,
@@ -67,30 +67,27 @@ class JWTManager:
             algorithms=[self.algorithm],
         )
 
-    # JWT tokena validācija
+    # Access tokena validācija
     def validate_access_token(
         self,
         token: str,
-    ) -> bool:
+    ) -> dict:
 
-        try:
-            payload = self.decode_access_token(token)
+        payload = self.decode_access_token(token)
 
-            # Pārbauda tokena tipu
-            if payload.get("type") != "access":
-                return False
+        # Pārbauda tokena tipu
+        if payload.get("type") != "access":
+            raise jwt.InvalidTokenError(
+                "Invalid token type"
+            )
 
-            # Pārbauda lietotāja identifikatoru
-            if not payload.get("sub"):
-                return False
+        # Pārbauda lietotāja identifikatoru
+        if not payload.get("sub"):
+            raise jwt.InvalidTokenError(
+                "Missing subject"
+            )
 
-            return True
-
-        except jwt.ExpiredSignatureError:
-            return False
-
-        except jwt.InvalidTokenError:
-            return False
+        return payload
 
     # Pārbauda, vai tokenam ir konkrēta loma
     def has_role(
@@ -99,18 +96,13 @@ class JWTManager:
         role: str,
     ) -> bool:
 
-        try:
-            payload = self.decode_access_token(token)
+        payload = self.validate_access_token(
+            token
+        )
 
-            if payload.get("type") != "access":
-                return False
+        roles = payload.get("roles", [])
 
-            roles = payload.get("roles", [])
-
-            return role in roles
-
-        except jwt.InvalidTokenError:
-            return False
+        return role in roles
 
     # Atgriež lietotāja identifikatoru no tokena
     def get_user_id(
@@ -118,7 +110,9 @@ class JWTManager:
         token: str,
     ) -> int:
 
-        payload = self.decode_access_token(token)
+        payload = self.validate_access_token(
+            token
+        )
 
         return int(payload["sub"])
 
@@ -128,6 +122,8 @@ class JWTManager:
         token: str,
     ) -> list[str]:
 
-        payload = self.decode_access_token(token)
+        payload = self.validate_access_token(
+            token
+        )
 
         return payload.get("roles", [])
