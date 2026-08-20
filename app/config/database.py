@@ -1,10 +1,20 @@
+# ==============================
+# Bibliotēku imports
+# ==============================
+
 from sqlmodel import SQLModel
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from .config import settings
+
 import models
 
 
+# ==============================
+# Datu bāzes konfigurācija
+# ==============================
+
+# PostgreSQL savienojuma adrese
 DATABASE_URL = (
     f"postgresql+asyncpg://"
     f"{settings.POSTGRES_USER}:"
@@ -15,12 +25,22 @@ DATABASE_URL = (
 )
 
 
+# ==============================
+# Datu bāzes dzinējs
+# ==============================
+
+# Asinhronā PostgreSQL dzinēja izveide
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=True,
 )
 
 
+# ==============================
+# Datu bāzes inicializācija
+# ==============================
+
+# Modeļu tabulu izveide datu bāzē
 async def init_db():
     async with engine.begin() as connection:
         await connection.run_sync(
