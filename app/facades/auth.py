@@ -19,6 +19,7 @@ from schemas import (
 )
 
 from services.login import LoginService
+from services.logout import LogoutService
 from services.refresh import RefreshTokenService
 from services.registration import RegistrationService
 
@@ -118,6 +119,16 @@ class AuthFacade:
             )
         )
 
+        # Atteikšanās serviss
+        self.logout_service = LogoutService(
+            refresh_token_repository=(
+                refresh_token_repository
+            ),
+            refresh_token_manager=(
+                refresh_token_manager
+            ),
+        )
+
     # Lietotāja reģistrācija
     async def register(
         self,
@@ -146,4 +157,24 @@ class AuthFacade:
 
         return await self.refresh_token_service.rotate(
             data
+        )
+
+    # Atteikšanās no pašreizējās sesijas
+    async def logout(
+        self,
+        data: RefreshTokenRequest,
+    ) -> None:
+
+        await self.logout_service.logout(
+            data
+        )
+
+    # Atteikšanās no visām sesijām
+    async def logout_all(
+        self,
+        user_id: int,
+    ) -> None:
+
+        await self.logout_service.logout_all(
+            user_id
         )
