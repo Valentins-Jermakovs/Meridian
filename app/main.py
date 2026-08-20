@@ -9,6 +9,9 @@ from fastapi import FastAPI
 # Datu bāzes inicializācija
 from config.database import init_db
 
+# Ceļu imports
+from routers import main_router
+
 
 # ==============================
 # Programmas dzīves cikls
@@ -32,9 +35,9 @@ app = FastAPI(
 
 
 # ==============================
-# Testa maršruts
+# Maršruti
 # ==============================
 
-@app.get("/")
-async def root():
-    return {"message": "Auth service"}
+app.include_router(
+    main_router
+)
