@@ -9,6 +9,11 @@ from fastapi import FastAPI
 # Datu bāzes inicializācija
 from config.database import init_db
 
+from config.redis import (
+    init_redis,
+    close_redis,
+)
+
 # Ceļu imports
 from routers import main_router
 
@@ -19,10 +24,17 @@ from routers import main_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Datu bāzes inicializācija programmas startēšanas laikā
+
+    # PostgreSQL inicializācija
     await init_db()
 
+    # Redis inicializācija
+    await init_redis()
+
     yield
+
+    # Redis savienojuma aizvēršana
+    await close_redis()
 
 
 # ==============================

@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
 
+    # Redis iestatījumi
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_DB: int
+    REDIS_PASSWORD: str | None = None
+    REDIS_CACHE_TTL: int = 60
+
     # JWT tokenu iestatījumi
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str

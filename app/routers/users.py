@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
 from config.database import get_session
+from config.redis import redis_client
 
 from facades.user import UserFacade
 
@@ -17,8 +18,19 @@ from schemas import (
     UserSelfUpdate,
 )
 
+from utils import RedisCache
 from utils.jwt import JWTManager
 from utils.jwt_auth import JWTAuth
+
+
+# ==============================
+# Redis kešatmiņas konfigurācija
+# ==============================
+
+redis_cache = RedisCache(
+    client=redis_client,
+    ttl=settings.REDIS_CACHE_TTL,
+)
 
 
 # ==============================
@@ -69,7 +81,10 @@ async def search_users(
         get_session
     ),
 ):
-    facade = UserFacade(session)
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
 
     return await facade.search(
         query=query,
@@ -78,6 +93,9 @@ async def search_users(
     )
 
 
+# ==============================
+# Paša lietotāja informācija
+# ==============================
 
 @router.get(
     "/me",
@@ -91,7 +109,10 @@ async def get_current_user(
         get_session
     ),
 ):
-    facade = UserFacade(session)
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
 
     user_id = int(
         current_user["sub"]
@@ -119,7 +140,10 @@ async def update_current_user(
         get_session
     ),
 ):
-    facade = UserFacade(session)
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
 
     user_id = int(
         current_user["sub"]
@@ -151,7 +175,10 @@ async def get_user_by_id(
         get_session
     ),
 ):
-    facade = UserFacade(session)
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
 
     return await facade.get_by_id(
         user_id
@@ -179,7 +206,10 @@ async def update_user_by_admin(
         get_session
     ),
 ):
-    facade = UserFacade(session)
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
 
     admin_id = int(
         current_user["sub"]

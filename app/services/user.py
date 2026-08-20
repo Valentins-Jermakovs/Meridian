@@ -24,6 +24,7 @@ from schemas.user import (
 from utils import (
     DataNormalizer,
     PasswordManager,
+    RedisCache,
 )
 
 
@@ -39,6 +40,7 @@ class UserUpdateService:
         role_repository: RoleRepository,
         normalizer: DataNormalizer,
         password_manager: PasswordManager,
+        redis_cache: RedisCache,
     ):
         # Lietotāja repozitorijs
         self.user_repository = user_repository
@@ -51,6 +53,9 @@ class UserUpdateService:
 
         # Paroļu pārvaldnieks
         self.password_manager = password_manager
+
+        # Redis kešatmiņa
+        self.redis_cache = redis_cache
 
     # Lietotāja atbildes shēmas izveide
     async def _build_user_response(
@@ -84,6 +89,20 @@ class UserUpdateService:
         user_id: int,
     ) -> UserResponse:
 
+        # Redis atslēga
+        cache_key = f"user:{user_id}"
+
+        # Meklē Redis kešatmiņā
+        cached_user = await self.redis_cache.get(
+            cache_key
+        )
+
+        if cached_user is not None:
+            return UserResponse.model_validate(
+                cached_user
+            )
+
+        # Meklē PostgreSQL
         user = await self.user_repository.get_by_id(
             user_id
         )
@@ -94,9 +113,20 @@ class UserUpdateService:
                 detail="User not found",
             )
 
-        return await self._build_user_response(
+        # Izveido atbildi
+        response = await self._build_user_response(
             user
         )
+
+        # Saglabā Redis
+        await self.redis_cache.set(
+            cache_key,
+            response.model_dump(
+                mode="json"
+            ),
+        )
+
+        return response
 
     # Lietotāja datu atjaunošana
     async def _update_user(
@@ -185,24 +215,28 @@ class UserUpdateService:
         page_size: int = 20,
     ) -> UserListResponse:
 
+        # Lappuses validācija
         if page < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page must be greater than 0",
             )
 
+        # Lapas izmēra validācija
         if page_size < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page size must be greater than 0",
             )
 
+        # Maksimālais rezultātu skaits vienā lapā
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
                 detail="Page size cannot exceed 100",
             )
 
+        # Meklēšanas teksta normalizācija
         if query is not None:
             query = self.normalizer.normalize_text(
                 query
@@ -211,6 +245,25 @@ class UserUpdateService:
             if not query:
                 query = None
 
+        # Redis atslēga
+        cache_key = (
+            f"users:search:"
+            f"{query or 'all'}:"
+            f"{page}:"
+            f"{page_size}"
+        )
+
+        # Meklē Redis kešatmiņā
+        cached_result = await self.redis_cache.get(
+            cache_key
+        )
+
+        if cached_result is not None:
+            return UserListResponse.model_validate(
+                cached_result
+            )
+
+        # Meklē PostgreSQL
         users, total = (
             await self.user_repository.search(
                 query=query,
@@ -219,6 +272,7 @@ class UserUpdateService:
             )
         )
 
+        # Lietotāju saraksta izveide
         items = [
             UserListItem(
                 id=user.id,
@@ -231,17 +285,28 @@ class UserUpdateService:
             if user.id is not None
         ]
 
+        # Kopējais lapu skaits
         pages = ceil(
             total / page_size
         )
 
-        return UserListResponse(
+        response = UserListResponse(
             items=items,
             page=page,
             page_size=page_size,
             total=total,
             pages=pages,
         )
+
+        # Saglabā Redis
+        await self.redis_cache.set(
+            cache_key,
+            response.model_dump(
+                mode="json"
+            ),
+        )
+
+        return response
 
     # Lietotāja atjaunošana administratora režīmā
     async def update_by_admin(
@@ -287,34 +352,29 @@ class UserUpdateService:
             # Lietotāja lomu atjaunošana
             if data.roles is not None:
 
-                # Normalizē lomu nosaukumus
                 role_names = [
                     role.strip().lower()
                     for role in data.roles
                 ]
 
-                # Pārbauda, vai nav tukšas lomas
                 if not role_names:
                     raise HTTPException(
                         status_code=400,
                         detail="At least one role is required",
                     )
 
-                # Noņem dublikātus
                 role_names = list(
                     dict.fromkeys(
                         role_names
                     )
                 )
 
-                # Atrod lomas datu bāzē
                 roles = (
                     await self.role_repository.get_by_names(
                         role_names
                     )
                 )
 
-                # Pārbauda, vai visas lomas eksistē
                 found_role_names = {
                     role.name
                     for role in roles
@@ -335,14 +395,12 @@ class UserUpdateService:
                         ),
                     )
 
-                # ID der atrastajām lomām
                 role_ids = [
                     role.id
                     for role in roles
                     if role.id is not None
                 ]
 
-                # Lomu sinhronizācija
                 await self.user_repository.set_roles(
                     user_id=user.id,
                     role_ids=role_ids,
@@ -355,6 +413,16 @@ class UserUpdateService:
 
             # Izmaiņu saglabāšana
             await self.user_repository.commit()
+
+            # Dzēš lietotāja kešu
+            await self.redis_cache.delete(
+                f"user:{user.id}"
+            )
+
+            # Notīra meklēšanas kešu
+            await self.redis_cache.delete_pattern(
+                "users:search:*"
+            )
 
             return await self._build_user_response(
                 user
@@ -379,6 +447,7 @@ class UserUpdateService:
     ) -> UserResponse:
 
         try:
+            # Lietotāja meklēšana
             user = await self.user_repository.get_by_id(
                 user_id
             )
@@ -389,6 +458,7 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
+            # Paroles pārbaude
             if data.password is not None:
 
                 if data.current_password is None:
@@ -406,6 +476,7 @@ class UserUpdateService:
                         detail="Current password is incorrect",
                     )
 
+            # Lietotāja datu atjaunošana
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -418,11 +489,23 @@ class UserUpdateService:
                 password=data.password,
             )
 
+            # Lietotāja saglabāšana
             user = await self.user_repository.update(
                 user
             )
 
+            # Izmaiņu saglabāšana
             await self.user_repository.commit()
+
+            # Dzēš lietotāja kešu
+            await self.redis_cache.delete(
+                f"user:{user.id}"
+            )
+
+            # Notīra meklēšanas kešu
+            await self.redis_cache.delete_pattern(
+                "users:search:*"
+            )
 
             return await self._build_user_response(
                 user

@@ -21,6 +21,7 @@ from services.user import UserUpdateService
 from utils import (
     DataNormalizer,
     PasswordManager,
+    RedisCache,
 )
 
 
@@ -33,6 +34,7 @@ class UserFacade:
     def __init__(
         self,
         session: AsyncSession,
+        redis_cache: RedisCache,
     ):
         # Repozitoriji
         user_repository = UserRepository(
@@ -54,6 +56,7 @@ class UserFacade:
             role_repository=role_repository,
             normalizer=normalizer,
             password_manager=password_manager,
+            redis_cache=redis_cache,
         )
 
     # Lietotāja iegūšana pēc ID
