@@ -2,8 +2,12 @@
 # Bibliotēku imports
 # ==============================
 
-from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlmodel import SQLModel, select
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
 from .config import settings
 
@@ -37,12 +41,54 @@ engine: AsyncEngine = create_async_engine(
 
 
 # ==============================
+# Sākotnējo lomu inicializācija
+# ==============================
+
+async def init_roles(
+    session: AsyncSession,
+):
+    roles = [
+        {
+            "name": "admin",
+            "description": "System administrator",
+        },
+        {
+            "name": "user",
+            "description": "Standard user",
+        },
+    ]
+
+    for role_data in roles:
+        result = await session.execute(
+            select(models.Role).where(
+                models.Role.name == role_data["name"]
+            )
+        )
+
+        role = result.scalar_one_or_none()
+
+        if role is None:
+            session.add(
+                models.Role(
+                    name=role_data["name"],
+                    description=role_data["description"],
+                )
+            )
+
+    await session.commit()
+
+
+# ==============================
 # Datu bāzes inicializācija
 # ==============================
 
-# Modeļu tabulu izveide datu bāzē
 async def init_db():
+    # Tabulu izveide
     async with engine.begin() as connection:
         await connection.run_sync(
             SQLModel.metadata.create_all
         )
+
+    # Sākotnējo datu izveide
+    async with AsyncSession(engine) as session:
+        await init_roles(session)
