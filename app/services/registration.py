@@ -2,13 +2,24 @@
 # Bibliotēku imports
 # ==============================
 
+from fastapi import HTTPException
+
 from models import User
 
-from repositories.user import UserRepository
-from repositories.role import RoleRepository
+from repositories import (
+    UserRepository, 
+    RoleRepository
+)
 
-from utils.normalizer import DataNormalizer
-from utils.password import PasswordManager
+from schemas.user import (
+    UserCreate,
+    UserResponse,
+)
+
+from utils import (
+    DataNormalizer, 
+    PasswordManager
+)
 
 
 # ==============================
@@ -39,24 +50,27 @@ class RegistrationService:
     # Lietotāja reģistrācija
     async def register(
         self,
-        username: str,
-        full_name: str,
-        email: str,
-        password: str,
-    ) -> User:
+        data: UserCreate,
+    ) -> UserResponse:
 
         try:
             # Ievaddatu normalizācija
-            username = self.normalizer.normalize_username(
-                username
+            username = (
+                self.normalizer.normalize_username(
+                    data.username
+                )
             )
 
-            email = self.normalizer.normalize_email(
-                email
+            email = (
+                self.normalizer.normalize_email(
+                    str(data.email)
+                )
             )
 
-            full_name = self.normalizer.normalize_text(
-                full_name
+            full_name = (
+                self.normalizer.normalize_text(
+                    data.full_name
+                )
             )
 
             # Pārbauda, vai lietotājvārds jau eksistē
@@ -67,8 +81,9 @@ class RegistrationService:
             )
 
             if existing_user is not None:
-                raise ValueError(
-                    "Username already exists"
+                raise HTTPException(
+                    status_code=409,
+                    detail="Username already exists",
                 )
 
             # Pārbauda, vai e-pasts jau eksistē
@@ -79,8 +94,9 @@ class RegistrationService:
             )
 
             if existing_user is not None:
-                raise ValueError(
-                    "Email already exists"
+                raise HTTPException(
+                    status_code=409,
+                    detail="Email already exists",
                 )
 
             # Meklē noklusējuma lomu
@@ -89,14 +105,15 @@ class RegistrationService:
             )
 
             if role is None:
-                raise ValueError(
-                    "Default role 'user' not found"
+                raise HTTPException(
+                    status_code=500,
+                    detail="Default role 'user' not found",
                 )
 
             # Paroles hešošana
             password_hash = (
                 self.password_manager.hash_password(
-                    password
+                    data.password
                 )
             )
 
@@ -114,16 +131,18 @@ class RegistrationService:
             )
 
             if user.id is None:
-                raise ValueError(
-                    "User ID was not generated"
+                raise HTTPException(
+                    status_code=500,
+                    detail="User ID was not generated",
                 )
 
             if role.id is None:
-                raise ValueError(
-                    "Role ID was not generated"
+                raise HTTPException(
+                    status_code=500,
+                    detail="Role ID was not generated",
                 )
 
-            # Lomas piešķiršana
+            # Noklusējuma lomas piešķiršana
             await self.user_repository.add_role(
                 user.id,
                 role.id,
@@ -132,10 +151,31 @@ class RegistrationService:
             # Izmaiņu saglabāšana
             await self.user_repository.commit()
 
-            return user
+            # Lietotāja lomu iegūšana
+            roles = await self.user_repository.get_roles(
+                user.id
+            )
+
+            # Lietotāja atbildes shēmas izveide
+            return UserResponse(
+                id=user.id,
+                username=user.username,
+                full_name=user.full_name,
+                email=user.email,
+                roles=roles,
+                is_active=user.is_active,
+                created_at=user.created_at,
+            )
+
+        except HTTPException:
+            # HTTP kļūdas pārsūtīšana tālāk
+            raise
 
         except Exception:
-            # Izmaiņu atcelšana kļūdas gadījumā
+            # Izmaiņu atcelšana
             await self.user_repository.rollback()
 
-            raise
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to register user",
+            )

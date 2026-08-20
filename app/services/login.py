@@ -4,15 +4,27 @@
 
 from datetime import datetime, timedelta
 
-from models import RefreshToken, User
+from fastapi import HTTPException
 
-from repositories.user import UserRepository
-from repositories.refresh_token import RefreshTokenRepository
+from models import RefreshToken
 
-from utils.normalizer import DataNormalizer
-from utils.password import PasswordManager
-from utils.jwt import JWTManager
-from utils.refresh_token import RefreshTokenManager
+from repositories import (
+    UserRepository, 
+    RefreshTokenRepository
+)
+
+
+from schemas import (
+    LoginRequest, 
+    TokenResponse
+)
+
+from utils import (
+    DataNormalizer, 
+    PasswordManager, 
+    JWTManager, 
+    RefreshTokenManager
+)
 
 
 # ==============================
@@ -61,116 +73,125 @@ class LoginService:
     # Lietotāja pieslēgšanās
     async def login(
         self,
-        login: str,
-        password: str,
-    ) -> dict:
+        data: LoginRequest,
+    ) -> TokenResponse:
 
-        try:
-            # Ievaddatu normalizācija
-            login = self.normalizer.normalize_text(
+        # Ievaddatu normalizācija
+        login = self.normalizer.normalize_text(
+            data.login
+        )
+
+        # Meklē pēc lietotājvārda
+        username = self.normalizer.normalize_username(
+            login
+        )
+
+        user = await self.user_repository.get_by_username(
+            username
+        )
+
+        # Ja pēc username neatrada,
+        # meklē pēc e-pasta
+        if user is None:
+            email = self.normalizer.normalize_email(
                 login
             )
 
-            user = None
-
-            # Meklē pēc lietotājvārda
-            username = self.normalizer.normalize_username(
-                login
+            user = await self.user_repository.get_by_email(
+                email
             )
 
-            user = await self.user_repository.get_by_username(
-                username
+        # Nepareizi autentifikācijas dati
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid credentials",
             )
 
-            # Ja pēc username neatrada, meklē pēc e-pasta
-            if user is None:
-                email = self.normalizer.normalize_email(
-                    login
-                )
-
-                user = await self.user_repository.get_by_email(
-                    email
-                )
-
-            # Nepareizi autentifikācijas dati
-            if user is None:
-                raise ValueError(
-                    "Invalid credentials"
-                )
-
-            # Pārbauda lietotāja aktivitāti
-            if not user.is_active:
-                raise ValueError(
-                    "User account is inactive"
-                )
-
-            # Pārbauda paroli
-            if not self.password_manager.verify_password(
-                password,
-                user.password_hash,
-            ):
-                raise ValueError(
-                    "Invalid credentials"
-                )
-
-            if user.id is None:
-                raise ValueError(
-                    "User ID was not generated"
-                )
-
-            # Lietotāja lomu iegūšana
-            roles = await self.user_repository.get_roles(
-                user.id
+        # Pārbauda lietotāja aktivitāti
+        if not user.is_active:
+            raise HTTPException(
+                status_code=403,
+                detail="User account is inactive",
             )
 
-            # Access tokena izveide
-            access_token = (
-                self.jwt_manager.create_access_token(
-                    user_id=user.id,
-                    roles=roles,
-                )
+        # Pārbauda paroli
+        if not self.password_manager.verify_password(
+            data.password,
+            user.password_hash,
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid credentials",
             )
 
-            # Refresh tokena ģenerēšana
-            raw_refresh_token = (
-                self.refresh_token_manager.generate_token()
+        if user.id is None:
+            raise HTTPException(
+                status_code=500,
+                detail="User ID was not generated",
             )
 
-            # Refresh tokena hešošana
-            token_hash = (
-                self.refresh_token_manager.hash_token(
-                    raw_refresh_token
-                )
-            )
+        # Lietotāja lomu iegūšana
+        roles = await self.user_repository.get_roles(
+            user.id
+        )
 
-            # Refresh tokena termiņš
-            expires_at = datetime.now() + timedelta(
+        # Access tokena izveide
+        access_token = (
+            self.jwt_manager.create_access_token(
+                user_id=user.id,
+                roles=roles,
+            )
+        )
+
+        # Refresh tokena ģenerēšana
+        raw_refresh_token = (
+            self.refresh_token_manager.generate_token()
+        )
+
+        # Refresh tokena hešošana
+        token_hash = (
+            self.refresh_token_manager.hash_token(
+                raw_refresh_token
+            )
+        )
+
+        # Refresh tokena termiņš
+        expires_at = (
+            datetime.now()
+            + timedelta(
                 days=self.refresh_token_expire_days
             )
+        )
 
-            # Refresh tokena modeļa izveide
-            refresh_token_model = RefreshToken(
-                user_id=user.id,
-                token_hash=token_hash,
-                expires_at=expires_at,
-            )
+        # Refresh tokena modeļa izveide
+        refresh_token = RefreshToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
 
+        try:
             # Refresh tokena saglabāšana
             await self.refresh_token_repository.create(
-                refresh_token_model
+                refresh_token
             )
 
             # Izmaiņu saglabāšana
             await self.refresh_token_repository.commit()
 
-            return {
-                "access_token": access_token,
-                "refresh_token": raw_refresh_token,
-                "token_type": "bearer",
-            }
-
         except Exception:
             # Izmaiņu atcelšana
             await self.refresh_token_repository.rollback()
 
-            raise
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create refresh token",
+            )
+
+        # Tokenu atgriešana
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=raw_refresh_token,
+            token_type="bearer",
+        )

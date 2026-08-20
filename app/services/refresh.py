@@ -4,13 +4,24 @@
 
 from datetime import datetime, timedelta
 
+from fastapi import HTTPException
+
 from models import RefreshToken
 
-from repositories.user import UserRepository
-from repositories.refresh_token import RefreshTokenRepository
+from repositories import (
+    UserRepository, 
+    RefreshTokenRepository
+)
 
-from utils.jwt import JWTManager
-from utils.refresh_token import RefreshTokenManager
+from schemas import (
+    TokenResponse, 
+    RefreshTokenRequest
+)
+
+from utils import (
+    JWTManager, 
+    RefreshTokenManager
+)
 
 
 # ==============================
@@ -51,14 +62,14 @@ class RefreshTokenService:
     # Refresh tokena rotācija
     async def rotate(
         self,
-        refresh_token: str,
-    ) -> dict:
+        data: RefreshTokenRequest,
+    ) -> TokenResponse:
 
         try:
             # Refresh tokena hešošana
             token_hash = (
                 self.refresh_token_manager.hash_token(
-                    refresh_token
+                    data.refresh_token
                 )
             )
 
@@ -70,35 +81,41 @@ class RefreshTokenService:
                 )
             )
 
+            # Tokens nav atrasts
             if stored_token is None:
-                raise ValueError(
-                    "Invalid refresh token"
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid refresh token",
                 )
 
             # Pārbauda, vai tokens jau ir atsaukts
             if stored_token.revoked:
 
-                # Iespējamā tokena atkārtota izmantošana
+                # Atsauc visus lietotāja tokenus,
+                # jo iespējama tokena atkārtota izmantošana
                 await self.refresh_token_repository.revoke_all_by_user(
                     stored_token.user_id
                 )
 
                 await self.refresh_token_repository.commit()
 
-                raise ValueError(
-                    "Refresh token reuse detected"
+                raise HTTPException(
+                    status_code=401,
+                    detail="Refresh token reuse detected",
                 )
 
             # Pārbauda tokena derīguma termiņu
             if stored_token.expires_at <= datetime.now():
+
                 await self.refresh_token_repository.revoke(
                     stored_token
                 )
 
                 await self.refresh_token_repository.commit()
 
-                raise ValueError(
-                    "Refresh token expired"
+                raise HTTPException(
+                    status_code=401,
+                    detail="Refresh token expired",
                 )
 
             # Lietotāja meklēšana
@@ -107,19 +124,22 @@ class RefreshTokenService:
             )
 
             if user is None:
-                raise ValueError(
-                    "User not found"
+                raise HTTPException(
+                    status_code=401,
+                    detail="User not found",
                 )
 
             # Pārbauda lietotāja aktivitāti
             if not user.is_active:
-                raise ValueError(
-                    "User account is inactive"
+                raise HTTPException(
+                    status_code=403,
+                    detail="User account is inactive",
                 )
 
             if user.id is None:
-                raise ValueError(
-                    "User ID was not generated"
+                raise HTTPException(
+                    status_code=500,
+                    detail="User ID was not generated",
                 )
 
             # Lietotāja lomu iegūšana
@@ -135,19 +155,24 @@ class RefreshTokenService:
                 )
             )
 
-            # Jauna refresh tokena izveide
+            # Jauna refresh tokena ģenerēšana
             new_refresh_token = (
                 self.refresh_token_manager.generate_token()
             )
 
+            # Jaunā refresh tokena hešošana
             new_token_hash = (
                 self.refresh_token_manager.hash_token(
                     new_refresh_token
                 )
             )
 
-            new_expires_at = datetime.now() + timedelta(
-                days=self.refresh_token_expire_days
+            # Jaunā tokena derīguma termiņš
+            new_expires_at = (
+                datetime.now()
+                + timedelta(
+                    days=self.refresh_token_expire_days
+                )
             )
 
             # Vecā tokena atsaukšana
@@ -155,13 +180,14 @@ class RefreshTokenService:
                 stored_token
             )
 
-            # Jaunā tokena saglabāšana
+            # Jaunā refresh tokena modeļa izveide
             new_refresh_token_model = RefreshToken(
                 user_id=user.id,
                 token_hash=new_token_hash,
                 expires_at=new_expires_at,
             )
 
+            # Jaunā refresh tokena saglabāšana
             await self.refresh_token_repository.create(
                 new_refresh_token_model
             )
@@ -169,13 +195,22 @@ class RefreshTokenService:
             # Izmaiņu saglabāšana
             await self.refresh_token_repository.commit()
 
-            return {
-                "access_token": access_token,
-                "refresh_token": new_refresh_token,
-                "token_type": "bearer",
-            }
+            # Tokenu atgriešana
+            return TokenResponse(
+                access_token=access_token,
+                refresh_token=new_refresh_token,
+                token_type="bearer",
+            )
+
+        except HTTPException:
+            # HTTP kļūdu pārsūtīšana tālāk
+            raise
 
         except Exception:
+            # Izmaiņu atcelšana neparedzētas kļūdas gadījumā
             await self.refresh_token_repository.rollback()
 
-            raise
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to rotate refresh token",
+            )
