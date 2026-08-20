@@ -64,7 +64,8 @@ class UserFacade:
         audit_log_service = AuditLogService(
             audit_log_repository=(
                 audit_log_repository
-            )
+            ),
+            redis_cache=redis_cache,
         )
 
         # ==============================
@@ -87,7 +88,10 @@ class UserFacade:
             redis_cache=redis_cache,
         )
 
+        # ==============================
         # Audit servisa piesaiste
+        # ==============================
+
         self.user_service.audit_log_service = (
             audit_log_service
         )

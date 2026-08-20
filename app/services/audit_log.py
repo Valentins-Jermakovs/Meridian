@@ -8,7 +8,10 @@ from math import ceil
 
 from fastapi import HTTPException
 
-from models import AuditAction, AuditLog
+from models import (
+    AuditAction,
+    AuditLog,
+)
 
 from repositories import AuditLogRepository
 
@@ -16,6 +19,8 @@ from schemas.audit import (
     AuditLogListItem,
     AuditLogListResponse,
 )
+
+from utils import RedisCache
 
 
 # ==============================
@@ -27,13 +32,20 @@ class AuditLogService:
     def __init__(
         self,
         audit_log_repository: AuditLogRepository,
+        redis_cache: RedisCache,
     ):
         # Audit žurnāla repozitorijs
         self.audit_log_repository = (
             audit_log_repository
         )
 
+        # Redis kešatmiņa
+        self.redis_cache = redis_cache
+
+    # ==============================
     # Audit ieraksta izveide
+    # ==============================
+
     async def create(
         self,
         user_id: int | None,
@@ -64,6 +76,7 @@ class AuditLogService:
             return audit_log
 
         except Exception:
+
             # Izmaiņu atcelšana
             await self.audit_log_repository.rollback()
 
@@ -72,7 +85,10 @@ class AuditLogService:
                 detail="Failed to create audit log",
             )
 
+    # ==============================
     # Audit žurnāla meklēšana
+    # ==============================
+
     async def search(
         self,
         query: str | None = None,
@@ -83,35 +99,69 @@ class AuditLogService:
         page_size: int = 20,
     ) -> AuditLogListResponse:
 
-        # Lappuses validācija
+        # ==============================
+        # Validācija
+        # ==============================
+
         if page < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page must be greater than 0",
             )
 
-        # Lapas izmēra validācija
         if page_size < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page size must be greater than 0",
             )
 
-        # Maksimālais ierakstu skaits vienā lapā
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
                 detail="Page size cannot exceed 100",
             )
 
-        # Meklēšanas teksta normalizācija
+        # ==============================
+        # Normalizācija
+        # ==============================
+
         if query is not None:
             query = query.strip()
 
             if not query:
                 query = None
 
-        # Audit ierakstu meklēšana
+        # ==============================
+        # Redis atslēga
+        # ==============================
+
+        cache_key = (
+            "audit:search:"
+            f"{query or 'all'}:"
+            f"{user_id if user_id is not None else 'all'}:"
+            f"{action.value if action else 'all'}:"
+            f"{'true' if success is True else 'false' if success is False else 'all'}:"
+            f"{page}:"
+            f"{page_size}"
+        )
+
+        # ==============================
+        # Redis pārbaude
+        # ==============================
+
+        cached_result = await self.redis_cache.get(
+            cache_key
+        )
+
+        if cached_result is not None:
+            return AuditLogListResponse.model_validate(
+                cached_result
+            )
+
+        # ==============================
+        # PostgreSQL meklēšana
+        # ==============================
+
         logs, total = (
             await self.audit_log_repository.search(
                 query=query,
@@ -123,7 +173,10 @@ class AuditLogService:
             )
         )
 
+        # ==============================
         # Atbildes elementu izveide
+        # ==============================
+
         items = [
             AuditLogListItem(
                 id=log.id,
@@ -137,12 +190,15 @@ class AuditLogService:
             if log.id is not None
         ]
 
+        # ==============================
         # Kopējais lapu skaits
+        # ==============================
+
         pages = ceil(
             total / page_size
         )
 
-        return AuditLogListResponse(
+        response = AuditLogListResponse(
             items=items,
             page=page,
             page_size=page_size,
@@ -150,7 +206,24 @@ class AuditLogService:
             pages=pages,
         )
 
+        # ==============================
+        # Redis saglabāšana
+        # ==============================
+
+        await self.redis_cache.set(
+            cache_key,
+            response.model_dump(
+                mode="json"
+            ),
+            ttl=5,
+        )
+
+        return response
+
+    # ==============================
     # Audit žurnāla CSV eksports
+    # ==============================
+
     async def export_csv(
         self,
         query: str | None = None,
@@ -161,6 +234,7 @@ class AuditLogService:
 
         # Meklēšanas teksta normalizācija
         if query is not None:
+
             query = query.strip()
 
             if not query:
@@ -168,11 +242,13 @@ class AuditLogService:
 
         try:
             # Ierakstu iegūšana pēc meklēšanas parametriem
-            logs = await self.audit_log_repository.export(
-                query=query,
-                user_id=user_id,
-                action=action,
-                success=success,
+            logs = (
+                await self.audit_log_repository.export(
+                    query=query,
+                    user_id=user_id,
+                    action=action,
+                    success=success,
+                )
             )
 
             # CSV izveide atmiņā
@@ -239,6 +315,7 @@ class AuditLogService:
             )
 
         except Exception:
+
             raise HTTPException(
                 status_code=500,
                 detail="Failed to export audit log",

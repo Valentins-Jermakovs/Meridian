@@ -4,7 +4,10 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import AuditAction, AuditLog
+from models import (
+    AuditAction,
+    AuditLog,
+)
 
 from repositories import AuditLogRepository
 
@@ -13,6 +16,8 @@ from schemas.audit import (
 )
 
 from services import AuditLogService
+
+from utils import RedisCache
 
 
 # ==============================
@@ -24,6 +29,7 @@ class AuditLogFacade:
     def __init__(
         self,
         session: AsyncSession,
+        redis_cache: RedisCache,
     ):
         # Audit žurnāla repozitorijs
         audit_log_repository = (
@@ -37,11 +43,15 @@ class AuditLogFacade:
             AuditLogService(
                 audit_log_repository=(
                     audit_log_repository
-                )
+                ),
+                redis_cache=redis_cache,
             )
         )
 
+    # ==============================
     # Audit ieraksta izveide
+    # ==============================
+
     async def create(
         self,
         user_id: int | None,
@@ -57,7 +67,10 @@ class AuditLogFacade:
             success=success,
         )
 
+    # ==============================
     # Audit žurnāla meklēšana
+    # ==============================
+
     async def search(
         self,
         query: str | None = None,
@@ -77,7 +90,10 @@ class AuditLogFacade:
             page_size=page_size,
         )
 
+    # ==============================
     # Audit žurnāla CSV eksports
+    # ==============================
+
     async def export_csv(
         self,
         query: str | None = None,

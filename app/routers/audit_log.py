@@ -6,12 +6,14 @@ from fastapi import (
     APIRouter,
     Depends,
 )
+
 from fastapi.responses import Response
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
 from config.database import get_session
+from config.redis import redis_client
 
 from facades.audit import AuditLogFacade
 
@@ -21,8 +23,11 @@ from schemas.audit import (
     AuditLogListResponse,
 )
 
-from utils.jwt import JWTManager
-from utils.jwt_auth import JWTAuth
+from utils import (
+    JWTManager,
+    JWTAuth,
+    RedisCache,
+)
 
 
 # ==============================
@@ -39,6 +44,16 @@ jwt_manager = JWTManager(
 
 jwt_auth = JWTAuth(
     jwt_manager=jwt_manager,
+)
+
+
+# ==============================
+# Redis konfigurācija
+# ==============================
+
+redis_cache = RedisCache(
+    client=redis_client,
+    ttl=settings.REDIS_CACHE_TTL,
 )
 
 
@@ -77,7 +92,8 @@ async def search_audit_logs(
     ),
 ):
     facade = AuditLogFacade(
-        session
+        session=session,
+        redis_cache=redis_cache,
     )
 
     return await facade.search(
@@ -112,7 +128,8 @@ async def export_audit_logs(
     ),
 ):
     facade = AuditLogFacade(
-        session
+        session=session,
+        redis_cache=redis_cache,
     )
 
     csv_data = await facade.export_csv(

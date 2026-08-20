@@ -5,6 +5,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
+from config.redis import redis_client
 
 from repositories import (
     UserRepository,
@@ -33,6 +34,7 @@ from utils import (
     PasswordManager,
     JWTManager,
     RefreshTokenManager,
+    RedisCache,
 )
 
 
@@ -71,13 +73,23 @@ class AuthFacade:
         )
 
         # ==============================
+        # Redis kešatmiņa
+        # ==============================
+
+        redis_cache = RedisCache(
+            client=redis_client,
+            ttl=settings.REDIS_CACHE_TTL,
+        )
+
+        # ==============================
         # Audit žurnāla serviss
         # ==============================
 
         audit_log_service = AuditLogService(
             audit_log_repository=(
                 audit_log_repository
-            )
+            ),
+            redis_cache=redis_cache,
         )
 
         # ==============================
