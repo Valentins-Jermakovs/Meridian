@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library imports
 # ==============================
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,12 +22,13 @@ from schemas import (
     UserResponse,
 )
 
-from services import AuditLogService
-
-from services.login import LoginService
-from services.logout import LogoutService
-from services.refresh import RefreshTokenService
-from services.registration import RegistrationService
+from services import (
+    AuditLogService,
+    LoginService,
+    LogoutService,
+    RefreshTokenService,
+    RegistrationService
+)
 
 from utils import (
     DataNormalizer,
@@ -39,52 +40,72 @@ from utils import (
 
 
 # ==============================
-# Autentifikācijas fasāde
+# Authentication Facade
 # ==============================
 
 class AuthFacade:
+    """
+    This class provides a facade for authentication-related functionality.
+    
+    It uses various services to perform operations such as registration, 
+    login, and logout.
+    
+    Attributes:
+        session (AsyncSession): The current database session.
+        
+    Methods:
+        register: Registers a new user.
+        login: Logs in an existing user.
+        refresh: Rotates the refresh token for the current user.
+        logout: Logs out the current user from their current session.
+        logout_all: Logs out all sessions for a given user ID.
+    """
 
     def __init__(
         self,
         session: AsyncSession,
     ):
-        # ==============================
-        # Repozitoriji
-        # ==============================
+        """
+        Initializes the AuthFacade instance.
+        
+        Args:
+            session (AsyncSession): The current database session.
+            
+        Returns:
+            None
+        """
 
+        # Create an instance of the UserRepository class
         user_repository = UserRepository(
             session
         )
 
+        # Create an instance of the RoleRepository class
         role_repository = RoleRepository(
             session
         )
 
+        # Create an instance of the RefreshTokenRepository class
         refresh_token_repository = (
             RefreshTokenRepository(
                 session
             )
         )
 
+        # Create an instance of the AuditLogRepository class
         audit_log_repository = (
             AuditLogRepository(
                 session
             )
         )
 
-        # ==============================
-        # Redis kešatmiņa
-        # ==============================
-
+        # Create a Redis cache instance
         redis_cache = RedisCache(
             client=redis_client,
             ttl=settings.REDIS_CACHE_TTL,
         )
 
-        # ==============================
-        # Audit žurnāla serviss
-        # ==============================
-
+        # Create an instance of the AuditLogService class
         audit_log_service = AuditLogService(
             audit_log_repository=(
                 audit_log_repository
@@ -92,10 +113,7 @@ class AuthFacade:
             redis_cache=redis_cache,
         )
 
-        # ==============================
-        # Utilītas
-        # ==============================
-
+        # Create instances of various utility classes
         normalizer = DataNormalizer()
 
         password_manager = PasswordManager()
@@ -112,10 +130,7 @@ class AuthFacade:
             RefreshTokenManager()
         )
 
-        # ==============================
-        # Reģistrācijas serviss
-        # ==============================
-
+        # Create an instance of the RegistrationService class
         self.registration_service = (
             RegistrationService(
                 user_repository=user_repository,
@@ -129,10 +144,7 @@ class AuthFacade:
             audit_log_service
         )
 
-        # ==============================
-        # Pieslēgšanās serviss
-        # ==============================
-
+        # Create an instance of the LoginService class
         self.login_service = LoginService(
             user_repository=user_repository,
             refresh_token_repository=(
@@ -153,10 +165,7 @@ class AuthFacade:
             audit_log_service
         )
 
-        # ==============================
-        # Refresh tokena serviss
-        # ==============================
-
+        # Create an instance of the RefreshTokenService class
         self.refresh_token_service = (
             RefreshTokenService(
                 user_repository=user_repository,
@@ -177,10 +186,7 @@ class AuthFacade:
             audit_log_service
         )
 
-        # ==============================
-        # Atteikšanās serviss
-        # ==============================
-
+        # Create an instance of the LogoutService class
         self.logout_service = LogoutService(
             refresh_token_repository=(
                 refresh_token_repository
@@ -195,65 +201,110 @@ class AuthFacade:
         )
 
     # ==============================
-    # Lietotāja reģistrācija
+    # Register user
     # ==============================
 
     async def register(
         self,
         data: UserCreate,
     ) -> UserResponse:
+        """
+        Registers a new user.
+        
+        Args:
+            data (UserCreate): The user creation data.
+            
+        Returns:
+            UserResponse: The created user response.
+        """
 
         return await self.registration_service.register(
             data
         )
 
     # ==============================
-    # Lietotāja pieslēgšanās
+    # Login existing user
     # ==============================
 
     async def login(
         self,
         data: LoginRequest,
     ) -> TokenResponse:
+        """
+        Logs in an existing user.
+        
+        Args:
+            data (LoginRequest): The login request data.
+            
+        Returns:
+            TokenResponse: The token response for the logged-in user.
+        """
 
         return await self.login_service.login(
             data
         )
 
     # ==============================
-    # Refresh tokena rotācija
+    # Rotate refresh token
     # ==============================
 
     async def refresh(
         self,
         data: RefreshTokenRequest,
     ) -> TokenResponse:
+        """
+        Rotates the refresh token for the current user.
+        
+        Args:
+            data (RefreshTokenRequest): The refresh token request data.
+            
+        Returns:
+            TokenResponse: The new token response with a rotated refresh token.
+        """
 
         return await self.refresh_token_service.rotate(
             data
         )
 
     # ==============================
-    # Atteikšanās no pašreizējās sesijas
+    # Logout from current session
     # ==============================
 
     async def logout(
         self,
         data: RefreshTokenRequest,
     ) -> None:
+        """
+        Logs out the current user from their current session.
+        
+        Args:
+            data (RefreshTokenRequest): The refresh token request data.
+            
+        Returns:
+            None
+        """
 
         await self.logout_service.logout(
             data
         )
 
     # ==============================
-    # Atteikšanās no visām sesijām
+    # Logout all sessions for given user ID
     # ==============================
 
     async def logout_all(
         self,
         user_id: int,
     ) -> None:
+        """
+        Logs out all sessions for a given user ID.
+        
+        Args:
+            user_id (int): The ID of the user to log out.
+            
+        Returns:
+            None
+        """
 
         await self.logout_service.logout_all(
             user_id
