@@ -38,7 +38,7 @@ DATABASE_URL = (
 # Asynchronous PostgreSQL engine creation
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
-    echo=True,
+    echo=False,
 )
 
 

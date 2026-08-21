@@ -1,12 +1,12 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-# Datu bāzes inicializācija
+# Database initialization
 from config.database import init_db
 
 from config.redis import (
@@ -14,31 +14,42 @@ from config.redis import (
     close_redis,
 )
 
-# Ceļu imports
+# Router imports
 from routers import main_router
 
 
 # ==============================
-# Programmas dzīves cikls
+# Application Lifecycle
 # ==============================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Manages the FastAPI application lifecycle.
 
-    # PostgreSQL inicializācija
+    Initializes the PostgreSQL database and Redis connection
+    when the application starts and closes the Redis connection
+    when the application shuts down.
+
+    Args:
+        app (FastAPI):
+            FastAPI application instance.
+    """
+
+    # Initialize PostgreSQL
     await init_db()
 
-    # Redis inicializācija
+    # Initialize Redis
     await init_redis()
 
     yield
 
-    # Redis savienojuma aizvēršana
+    # Close the Redis connection
     await close_redis()
 
 
 # ==============================
-# FastAPI aplikācijas objekts
+# FastAPI Application
 # ==============================
 
 app = FastAPI(
@@ -47,7 +58,7 @@ app = FastAPI(
 
 
 # ==============================
-# Maršruti
+# Router Registration
 # ==============================
 
 app.include_router(
