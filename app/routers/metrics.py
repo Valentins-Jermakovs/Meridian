@@ -1,5 +1,9 @@
-# Libraries:
+# ==============================
+# Library Imports
+# ==============================
+
 import asyncio
+
 import psutil
 
 from fastapi import (
@@ -12,16 +16,16 @@ from fastapi import (
 
 from config.config import settings
 
-# Schemas
 from schemas import SystemMetricsResponse
 
-# Utils
-from utils.jwt import JWTManager
-from utils.jwt_auth import JWTAuth
+from utils import (
+    JWTManager,
+    JWTAuth,
+)
 
 
 # ==============================
-# JWT konfigurācija
+# JWT Configuration
 # ==============================
 
 jwt_manager = JWTManager(
@@ -36,8 +40,9 @@ jwt_auth = JWTAuth(
     jwt_manager=jwt_manager,
 )
 
+
 # ==============================
-# Metriku maršrutētājs
+# Metrics Router
 # ==============================
 
 router = APIRouter(
@@ -46,9 +51,8 @@ router = APIRouter(
 )
 
 
-
 # ==============================
-# Servera metrikas WebSocket
+# Server Metrics WebSocket
 # ==============================
 
 @router.websocket("/ws/stats")
@@ -56,20 +60,31 @@ async def metrics_websocket(
     websocket: WebSocket,
     token: str | None = Query(default=None),
 ):
-    # Pārbauda, vai tokens ir saņemts
+    """
+    Sends server metrics over a WebSocket connection.
+
+    Args:
+        websocket (WebSocket): The WebSocket connection.
+        token (str | None): The access token. Defaults to None.
+
+    Returns:
+        None
+    """
+
+    # Check whether an access token was provided
     if token is None:
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION
         )
         return
 
-    # Tokena validācija
+    # Validate the access token
     try:
         payload = jwt_manager.validate_access_token(
             token
         )
 
-        # Pārbauda administratora lomu
+        # Check whether the user has the administrator role
         roles = payload.get(
             "roles",
             []
@@ -87,18 +102,18 @@ async def metrics_websocket(
         )
         return
 
-    # Savienojuma pieņemšana
+    # Accept the WebSocket connection
     await websocket.accept()
 
-    # Pašreizējais FastAPI/Uvicorn process
+    # Get the current FastAPI/Uvicorn process
     process = psutil.Process()
 
     try:
         while True:
-            # CPU izmantošana
+            # Get CPU usage of the current process
             cpu_percent = process.cpu_percent()
 
-            # Procesa atmiņa
+            # Get memory information of the current process
             memory = process.memory_info()
 
             data: SystemMetricsResponse = {
@@ -114,12 +129,12 @@ async def metrics_websocket(
                 ),
             }
 
-            # Metriku nosūtīšana klientam
+            # Send metrics to the connected client
             await websocket.send_json(
                 data
             )
 
-            # Metriku atjaunošana katru sekundi
+            # Update metrics every second
             await asyncio.sleep(1)
 
     except WebSocketDisconnect:

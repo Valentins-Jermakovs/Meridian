@@ -15,12 +15,11 @@ from config.config import settings
 from config.database import get_session
 from config.redis import redis_client
 
-from facades.audit import AuditLogFacade
+from facades import AuditLogFacade
 
 from models import AuditAction
 
 from schemas import AuditLogListResponse
-
 
 from utils import (
     JWTManager,

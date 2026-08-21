@@ -1,8 +1,10 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
-
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter, 
+    Depends
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
@@ -18,13 +20,15 @@ from schemas import (
     UserSelfUpdate,
 )
 
-from utils import RedisCache
-from utils.jwt import JWTManager
-from utils.jwt_auth import JWTAuth
+from utils import (
+    RedisCache, 
+    JWTManager, 
+    JWTAuth
+)
 
 
 # ==============================
-# Redis kešatmiņas konfigurācija
+# Redis cache configuration
 # ==============================
 
 redis_cache = RedisCache(
@@ -34,7 +38,7 @@ redis_cache = RedisCache(
 
 
 # ==============================
-# JWT konfigurācija
+# JWT Configuration
 # ==============================
 
 jwt_manager = JWTManager(
@@ -51,7 +55,7 @@ jwt_auth = JWTAuth(
 
 
 # ==============================
-# Lietotāja maršrutētājs
+# User Router
 # ==============================
 
 router = APIRouter(
@@ -61,7 +65,7 @@ router = APIRouter(
 
 
 # ==============================
-# Lietotāju meklēšana
+# Search Users
 # ==============================
 
 @router.get(
@@ -81,6 +85,19 @@ async def search_users(
         get_session
     ),
 ):
+    """
+    Searches for users.
+    
+    Args:
+        query (str | None): The search query. Defaults to None.
+        page (int): The page number. Defaults to 1.
+        page_size (int): The page size. Defaults to 20.
+        current_user (dict): The current user. Depends on JWTAuth.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        UserListResponse: The list of users.
+    """
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -94,7 +111,7 @@ async def search_users(
 
 
 # ==============================
-# Paša lietotāja informācija
+# Current User Information
 # ==============================
 
 @router.get(
@@ -109,6 +126,16 @@ async def get_current_user(
         get_session
     ),
 ):
+    """
+    Gets the current user information.
+    
+    Args:
+        current_user (dict): The current user. Defaults to None.
+        session (AsyncSession): The asynchronous database session. Defaults to None.
+    
+    Returns:
+        UserResponse: The current user information.
+    """
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -124,7 +151,7 @@ async def get_current_user(
 
 
 # ==============================
-# Paša lietotāja atjaunošana
+# Update Current User Information
 # ==============================
 
 @router.patch(
@@ -140,6 +167,17 @@ async def update_current_user(
         get_session
     ),
 ):
+    """
+    Updates the current user information.
+    
+    Args:
+        data (UserSelfUpdate): The new user information.
+        current_user (dict): The current user. Defaults to None.
+        session (AsyncSession): The asynchronous database session. Defaults to None.
+    
+    Returns:
+        UserResponse: The updated user information.
+    """
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -156,8 +194,8 @@ async def update_current_user(
 
 
 # ==============================
-# Lietotāja informācija
-# administratora režīmā
+# Get User Information by ID
+# Administrator Role
 # ==============================
 
 @router.get(
@@ -175,6 +213,17 @@ async def get_user_by_id(
         get_session
     ),
 ):
+    """
+    Gets the user information by ID.
+    
+    Args:
+        user_id (int): The user ID.
+        current_user (dict): The current user. Defaults to None.
+        session (AsyncSession): The asynchronous database session. Defaults to None.
+    
+    Returns:
+        UserResponse: The user information.
+    """
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -186,8 +235,7 @@ async def get_user_by_id(
 
 
 # ==============================
-# Lietotāja atjaunošana
-# administratora režīmā
+# Update User Information by Admin
 # ==============================
 
 @router.patch(
@@ -206,6 +254,18 @@ async def update_user_by_admin(
         get_session
     ),
 ):
+    """
+    Updates the user information by admin.
+    
+    Args:
+        user_id (int): The user ID.
+        data (UserAdminUpdate): The new user information.
+        current_user (dict): The current user. Defaults to None.
+        session (AsyncSession): The asynchronous database session. Defaults to None.
+    
+    Returns:
+        UserResponse: The updated user information.
+    """
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,

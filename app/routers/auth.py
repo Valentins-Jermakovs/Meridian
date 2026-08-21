@@ -1,8 +1,9 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from fastapi import APIRouter, Depends
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
@@ -18,12 +19,15 @@ from schemas import (
     UserResponse,
 )
 
-from utils.jwt import JWTManager
-from utils.jwt_auth import JWTAuth
+from utils import (
+    JWTManager, 
+    JWTAuth
+)
+
 
 
 # ==============================
-# JWT konfigurācija
+# JWT Configuration
 # ==============================
 
 jwt_manager = JWTManager(
@@ -40,7 +44,7 @@ jwt_auth = JWTAuth(
 
 
 # ==============================
-# Autentifikācijas maršrutētājs
+# Authentication Router
 # ==============================
 
 router = APIRouter(
@@ -50,7 +54,7 @@ router = APIRouter(
 
 
 # ==============================
-# Lietotāja reģistrācija
+# User Registration
 # ==============================
 
 @router.post(
@@ -64,6 +68,16 @@ async def register(
         get_session
     ),
 ):
+    """
+    Registers a new user.
+    
+    Args:
+        data (UserCreate): The user data.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        UserResponse: The registered user.
+    """
     facade = AuthFacade(session)
 
     return await facade.register(
@@ -72,7 +86,7 @@ async def register(
 
 
 # ==============================
-# Lietotāja pieslēgšanās
+# User Login
 # ==============================
 
 @router.post(
@@ -85,6 +99,16 @@ async def login(
         get_session
     ),
 ):
+    """
+    Logs in a user.
+    
+    Args:
+        data (LoginRequest): The login request.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        TokenResponse: The token response.
+    """
     facade = AuthFacade(session)
 
     return await facade.login(
@@ -93,7 +117,7 @@ async def login(
 
 
 # ==============================
-# Refresh tokena rotācija
+# Refresh Token Rotation
 # ==============================
 
 @router.post(
@@ -106,6 +130,16 @@ async def refresh(
         get_session
     ),
 ):
+    """
+    Rotates the refresh token.
+    
+    Args:
+        data (RefreshTokenRequest): The refresh token request.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        TokenResponse: The rotated token response.
+    """
     facade = AuthFacade(session)
 
     return await facade.refresh(
@@ -114,7 +148,7 @@ async def refresh(
 
 
 # ==============================
-# Atteikšanās no pašreizējās sesijas
+# Log out Current Session
 # ==============================
 
 @router.post(
@@ -127,6 +161,13 @@ async def logout(
         get_session
     ),
 ):
+    """
+    Logs out the current session.
+    
+    Args:
+        data (RefreshTokenRequest): The refresh token request.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    """
     facade = AuthFacade(session)
 
     await facade.logout(
@@ -135,7 +176,7 @@ async def logout(
 
 
 # ==============================
-# Atteikšanās no visām sesijām
+# Log out All Sessions
 # ==============================
 
 @router.post(
@@ -150,6 +191,13 @@ async def logout_all(
         get_session
     ),
 ):
+    """
+    Logs out all sessions.
+    
+    Args:
+        current_user (dict): The current user. Depends on JWTAuth.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    """
     facade = AuthFacade(session)
 
     user_id = int(
