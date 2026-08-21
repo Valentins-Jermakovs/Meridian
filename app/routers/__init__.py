@@ -1,12 +1,12 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from fastapi import APIRouter
 
 
 # ==============================
-# Maršrutētāju imports
+# Router Imports
 # ==============================
 
 from .auth import router as auth_router
@@ -15,14 +15,14 @@ from .metrics import router as metrics_router
 from .audit_log import router as audit_log_router
 
 # ==============================
-# Galvenais maršrutētājs
+# Main Router
 # ==============================
 
 main_router = APIRouter()
 
 
 # ==============================
-# Maršrutu pievienošana
+# Add Routes to Main Router
 # ==============================
 
 main_router.include_router(
