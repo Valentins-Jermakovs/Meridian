@@ -15,11 +15,12 @@ from schemas import (
     UserListResponse,
     UserResponse,
     UserSelfUpdate,
+    UserStatisticsResponse,
 )
 
 from services import (
-    AuditLogService, 
-    UserUpdateService
+    AuditLogService,
+    UserUpdateService,
 )
 
 from utils import (
@@ -35,18 +36,10 @@ from utils import (
 
 class UserFacade:
     """
-    This class provides a facade for user-related functionality.
-    
-    It uses various services to perform operations such as retrieving users, updating user data, etc.
-    
-    Attributes:
-        session (AsyncSession): The current database session.
-        
-    Methods:
-        get_by_id: Retrieves a user by their ID.
-        search: Searches for users based on a query string.
-        update_by_admin: Updates a user's data as an administrator.
-        update_self: Updates a user's own data.
+    Provides a simplified interface for user-related operations.
+
+    The facade coordinates repositories, services, utilities,
+    Redis caching, and audit logging.
     """
 
     def __init__(
@@ -55,34 +48,37 @@ class UserFacade:
         redis_cache: RedisCache,
     ):
         """
-        Initializes the UserFacade instance.
-        
+        Initializes the UserFacade.
+
         Args:
-            session (AsyncSession): The current database session.
-            redis_cache (RedisCache): The Redis cache instance.
-            
-        Returns:
-            None
+            session (AsyncSession):
+                Current asynchronous database session.
+            redis_cache (RedisCache):
+                Redis cache instance.
         """
 
-        # Create an instance of the UserRepository class
+        # ==============================
+        # Repositories
+        # ==============================
+
         user_repository = UserRepository(
             session
         )
 
-        # Create an instance of the RoleRepository class
         role_repository = RoleRepository(
             session
         )
 
-        # Create an instance of the AuditLogRepository class
         audit_log_repository = (
             AuditLogRepository(
                 session
             )
         )
 
-        # Create an instance of the AuditLogService class
+        # ==============================
+        # Audit Log Service
+        # ==============================
+
         audit_log_service = AuditLogService(
             audit_log_repository=(
                 audit_log_repository
@@ -90,12 +86,18 @@ class UserFacade:
             redis_cache=redis_cache,
         )
 
-        # Create instances of various utility classes
+        # ==============================
+        # Utilities
+        # ==============================
+
         normalizer = DataNormalizer()
 
         password_manager = PasswordManager()
 
-        # Create an instance of the UserUpdateService class
+        # ==============================
+        # User Service
+        # ==============================
+
         self.user_service = UserUpdateService(
             user_repository=user_repository,
             role_repository=role_repository,
@@ -104,13 +106,16 @@ class UserFacade:
             redis_cache=redis_cache,
         )
 
-        # Set up audit log service for user service
+        # ==============================
+        # Audit Service Injection
+        # ==============================
+
         self.user_service.audit_log_service = (
             audit_log_service
         )
 
     # ==============================
-    # Retrieve user by ID
+    # Retrieve User by ID
     # ==============================
 
     async def get_by_id(
@@ -119,12 +124,14 @@ class UserFacade:
     ) -> UserResponse:
         """
         Retrieves a user by their ID.
-        
+
         Args:
-            user_id (int): The ID of the user to retrieve.
-            
+            user_id (int):
+                ID of the requested user.
+
         Returns:
-            UserResponse: The retrieved user response.
+            UserResponse:
+                Requested user information.
         """
 
         return await self.user_service.get_by_id(
@@ -132,7 +139,7 @@ class UserFacade:
         )
 
     # ==============================
-    # Search for users
+    # Search Users
     # ==============================
 
     async def search(
@@ -142,15 +149,19 @@ class UserFacade:
         page_size: int = 20,
     ) -> UserListResponse:
         """
-        Searches for users based on a query string.
-        
+        Searches users with pagination.
+
         Args:
-            query (str | None): The query string to search for users.
-            page (int): The current page number.
-            page_size (int): The size of each page.
-            
+            query (str | None):
+                Optional search query.
+            page (int):
+                Page number.
+            page_size (int):
+                Number of users per page.
+
         Returns:
-            UserListResponse: The list of users matching the query.
+            UserListResponse:
+                Paginated user list.
         """
 
         return await self.user_service.search(
@@ -160,7 +171,7 @@ class UserFacade:
         )
 
     # ==============================
-    # Update user data as administrator
+    # Update User as Administrator
     # ==============================
 
     async def update_by_admin(
@@ -170,15 +181,19 @@ class UserFacade:
         data: UserAdminUpdate,
     ) -> UserResponse:
         """
-        Updates a user's data as an administrator.
-        
+        Updates a user's data using administrator privileges.
+
         Args:
-            admin_id (int): The ID of the administrator updating the user.
-            user_id (int): The ID of the user being updated.
-            data (UserAdminUpdate): The new data for the user.
-            
+            admin_id (int):
+                Administrator ID.
+            user_id (int):
+                User ID being updated.
+            data (UserAdminUpdate):
+                User update data.
+
         Returns:
-            UserResponse: The updated user response.
+            UserResponse:
+                Updated user information.
         """
 
         return await self.user_service.update_by_admin(
@@ -188,7 +203,7 @@ class UserFacade:
         )
 
     # ==============================
-    # Update own data
+    # Update Own User Data
     # ==============================
 
     async def update_self(
@@ -197,17 +212,40 @@ class UserFacade:
         data: UserSelfUpdate,
     ) -> UserResponse:
         """
-        Updates a user's own data.
-        
+        Updates the authenticated user's own profile.
+
         Args:
-            user_id (int): The ID of the user updating their own data.
-            data (UserSelfUpdate): The new data for the user.
-            
+            user_id (int):
+                Authenticated user ID.
+            data (UserSelfUpdate):
+                User profile update data.
+
         Returns:
-            UserResponse: The updated user response.
+            UserResponse:
+                Updated user information.
         """
 
         return await self.user_service.update_self(
             user_id=user_id,
             data=data,
         )
+
+    # ==============================
+    # Get User Statistics
+    # ==============================
+
+    async def get_statistics(
+        self,
+    ) -> UserStatisticsResponse:
+        """
+        Retrieves aggregated user statistics.
+
+        Redis is used by the underlying service to cache
+        the statistics and reduce repeated database queries.
+
+        Returns:
+            UserStatisticsResponse:
+                Total, active, and blocked user counts.
+        """
+
+        return await self.user_service.get_statistics()

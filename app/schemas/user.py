@@ -13,6 +13,20 @@ from sqlmodel import Field
 
 
 # ==============================
+# User Statistics Response
+# ==============================
+
+class UserStatisticsResponse(BaseModel):
+    """
+    Contains aggregated user statistics.
+    """
+
+    total: int
+    active: int
+    blocked: int
+
+
+# ==============================
 # User Create Schema
 # ==============================
 

@@ -411,3 +411,46 @@ class UserRepository:
             )
 
         await self.session.flush()
+
+    # ==============================
+    # Get User Statistics
+    # ==============================
+
+    async def get_statistics(
+        self,
+    ) -> dict[str, int]:
+        """
+        Returns user statistics.
+
+        Returns:
+            dict[str, int]:
+                Total, active, and blocked user counts.
+        """
+
+        statement = select(
+            func.count(User.id),
+            func.count(
+                User.id
+            ).filter(
+                User.is_active.is_(True)
+            ),
+            func.count(
+                User.id
+            ).filter(
+                User.is_active.is_(False)
+            ),
+        )
+
+        result = await self.session.execute(
+            statement
+        )
+
+        total, active, blocked = (
+            result.one()
+        )
+
+        return {
+            "total": total,
+            "active": active,
+            "blocked": blocked,
+        }

@@ -1,10 +1,12 @@
 # ==============================
 # Library Imports
 # ==============================
+
 from fastapi import (
-    APIRouter, 
-    Depends
+    APIRouter,
+    Depends,
 )
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.config import settings
@@ -18,12 +20,13 @@ from schemas import (
     UserListResponse,
     UserResponse,
     UserSelfUpdate,
+    UserStatisticsResponse,
 )
 
 from utils import (
-    RedisCache, 
-    JWTManager, 
-    JWTAuth
+    RedisCache,
+    JWTManager,
+    JWTAuth,
 )
 
 
@@ -87,17 +90,24 @@ async def search_users(
 ):
     """
     Searches for users.
-    
+
     Args:
-        query (str | None): The search query. Defaults to None.
-        page (int): The page number. Defaults to 1.
-        page_size (int): The page size. Defaults to 20.
-        current_user (dict): The current user. Depends on JWTAuth.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
+        query (str | None):
+            The search query.
+        page (int):
+            The page number.
+        page_size (int):
+            The page size.
+        current_user (dict):
+            Authenticated administrator.
+        session (AsyncSession):
+            Asynchronous database session.
+
     Returns:
-        UserListResponse: The list of users.
+        UserListResponse:
+            Paginated list of users.
     """
+
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -108,6 +118,48 @@ async def search_users(
         page=page,
         page_size=page_size,
     )
+
+
+# ==============================
+# User Statistics
+# ==============================
+
+@router.get(
+    "/stats",
+    response_model=UserStatisticsResponse,
+)
+async def get_user_statistics(
+    current_user: dict = Depends(
+        jwt_auth.require_roles(
+            ["admin"]
+        )
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    """
+    Returns aggregated user statistics.
+
+    The statistics are cached in Redis by the user service.
+
+    Args:
+        current_user (dict):
+            Authenticated administrator.
+        session (AsyncSession):
+            Asynchronous database session.
+
+    Returns:
+        UserStatisticsResponse:
+            Total, active, and blocked user counts.
+    """
+
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
+
+    return await facade.get_statistics()
 
 
 # ==============================
@@ -128,14 +180,18 @@ async def get_current_user(
 ):
     """
     Gets the current user information.
-    
+
     Args:
-        current_user (dict): The current user. Defaults to None.
-        session (AsyncSession): The asynchronous database session. Defaults to None.
-    
+        current_user (dict):
+            Authenticated user.
+        session (AsyncSession):
+            Asynchronous database session.
+
     Returns:
-        UserResponse: The current user information.
+        UserResponse:
+            Current user information.
     """
+
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -169,15 +225,20 @@ async def update_current_user(
 ):
     """
     Updates the current user information.
-    
+
     Args:
-        data (UserSelfUpdate): The new user information.
-        current_user (dict): The current user. Defaults to None.
-        session (AsyncSession): The asynchronous database session. Defaults to None.
-    
+        data (UserSelfUpdate):
+            New user information.
+        current_user (dict):
+            Authenticated user.
+        session (AsyncSession):
+            Asynchronous database session.
+
     Returns:
-        UserResponse: The updated user information.
+        UserResponse:
+            Updated user information.
     """
+
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -214,16 +275,21 @@ async def get_user_by_id(
     ),
 ):
     """
-    Gets the user information by ID.
-    
+    Gets user information by ID.
+
     Args:
-        user_id (int): The user ID.
-        current_user (dict): The current user. Defaults to None.
-        session (AsyncSession): The asynchronous database session. Defaults to None.
-    
+        user_id (int):
+            User ID.
+        current_user (dict):
+            Authenticated administrator.
+        session (AsyncSession):
+            Asynchronous database session.
+
     Returns:
-        UserResponse: The user information.
+        UserResponse:
+            User information.
     """
+
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,
@@ -255,17 +321,23 @@ async def update_user_by_admin(
     ),
 ):
     """
-    Updates the user information by admin.
-    
+    Updates user information by administrator.
+
     Args:
-        user_id (int): The user ID.
-        data (UserAdminUpdate): The new user information.
-        current_user (dict): The current user. Defaults to None.
-        session (AsyncSession): The asynchronous database session. Defaults to None.
-    
+        user_id (int):
+            User ID.
+        data (UserAdminUpdate):
+            New user information.
+        current_user (dict):
+            Authenticated administrator.
+        session (AsyncSession):
+            Asynchronous database session.
+
     Returns:
-        UserResponse: The updated user information.
+        UserResponse:
+            Updated user information.
     """
+
     facade = UserFacade(
         session=session,
         redis_cache=redis_cache,

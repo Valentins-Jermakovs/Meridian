@@ -28,6 +28,7 @@ Schema for refresh token requests.
 
 
 from .user import (
+    UserStatisticsResponse,
     UserCreate,
     UserSelfUpdate,
     UserAdminUpdate,

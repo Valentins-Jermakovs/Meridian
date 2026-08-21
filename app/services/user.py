@@ -16,12 +16,13 @@ from repositories import (
     UserRepository,
 )
 
-from schemas.user import (
+from schemas import (
     UserAdminUpdate,
     UserListItem,
     UserListResponse,
     UserResponse,
     UserSelfUpdate,
+    UserStatisticsResponse,
 )
 
 from services import AuditLogService
@@ -44,7 +45,7 @@ class UserUpdateService:
 
     The service supports both administrator updates and self-service
     profile updates. It also handles role management, password changes,
-    Redis caching, and audit logging.
+    Redis caching, user statistics, and audit logging.
     """
 
     def __init__(
@@ -105,16 +106,6 @@ class UserUpdateService:
 
         Audit logging errors are intentionally ignored so that a failure
         in the audit subsystem does not interrupt the user operation.
-
-        Args:
-            user_id (int | None):
-                Identifier of the user associated with the action.
-            action (AuditAction):
-                Type of action being recorded.
-            description (str):
-                Description of the performed action.
-            success (bool):
-                Indicates whether the action was successful.
         """
 
         if self.audit_log_service is None:
@@ -142,15 +133,6 @@ class UserUpdateService:
     ) -> UserResponse:
         """
         Builds a UserResponse object from a user model.
-
-        Args:
-            user (User): User model used to build the response.
-
-        Returns:
-            UserResponse: Serialized user information including roles.
-
-        Raises:
-            HTTPException: If the user does not have a generated ID.
         """
 
         if user.id is None:
@@ -185,17 +167,8 @@ class UserUpdateService:
         """
         Retrieves a user by ID.
 
-        The method first checks Redis and only queries PostgreSQL
-        when the requested user is not present in the cache.
-
-        Args:
-            user_id (int): Identifier of the requested user.
-
-        Returns:
-            UserResponse: Requested user information.
-
-        Raises:
-            HTTPException: If the user does not exist.
+        Redis is checked first. PostgreSQL is queried only
+        when the requested user is not cached.
         """
 
         # Redis cache key
@@ -254,28 +227,6 @@ class UserUpdateService:
         Applies the provided changes to a user model.
 
         Only fields explicitly provided to the method are modified.
-        Username and email uniqueness are checked before applying
-        corresponding changes.
-
-        Args:
-            user (User):
-                User model to update.
-            username (str | None):
-                New username, if provided.
-            full_name (str | None):
-                New full name, if provided.
-            email (str | None):
-                New email address, if provided.
-            password (str | None):
-                New password, if provided.
-            is_active (bool | None):
-                New account status, if provided.
-
-        Returns:
-            User: Updated user model.
-
-        Raises:
-            HTTPException: If the new username or email is already used.
         """
 
         # Update username
@@ -365,20 +316,6 @@ class UserUpdateService:
     ) -> UserListResponse:
         """
         Searches users with pagination and Redis caching.
-
-        Args:
-            query (str | None):
-                Optional search text.
-            page (int):
-                Page number starting from 1.
-            page_size (int):
-                Number of users per page. Maximum value is 100.
-
-        Returns:
-            UserListResponse: Paginated list of matching users.
-
-        Raises:
-            HTTPException: If the pagination parameters are invalid.
         """
 
         # Validate page number
@@ -395,7 +332,7 @@ class UserUpdateService:
                 detail="Page size must be greater than 0",
             )
 
-        # Limit the maximum page size
+        # Limit maximum page size
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
@@ -487,26 +424,6 @@ class UserUpdateService:
     ) -> UserResponse:
         """
         Updates another user's account using administrator privileges.
-
-        Administrators can update user information, account status,
-        password, and roles. An administrator cannot update their
-        own account through this method.
-
-        Args:
-            admin_id (int):
-                Identifier of the administrator performing the update.
-            user_id (int):
-                Identifier of the user being updated.
-            data (UserAdminUpdate):
-                User data to update.
-
-        Returns:
-            UserResponse: Updated user information.
-
-        Raises:
-            HTTPException: If the administrator attempts to update
-                themselves, the user does not exist, a role is invalid,
-                or the update fails.
         """
 
         try:
@@ -556,7 +473,7 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
-            # Store the original account status
+            # Store original account status
             old_is_active = user.is_active
 
             # ==============================
@@ -614,14 +531,14 @@ class UserUpdateService:
                     )
                 )
 
-                # Find roles in the database
+                # Find roles in database
                 roles = (
                     await self.role_repository.get_by_names(
                         role_names
                     )
                 )
 
-                # Check that all requested roles exist
+                # Check requested roles
                 found_role_names = {
                     role.name
                     for role in roles
@@ -655,14 +572,14 @@ class UserUpdateService:
                         ),
                     )
 
-                # Collect IDs of the requested roles
+                # Collect role IDs
                 role_ids = [
                     role.id
                     for role in roles
                     if role.id is not None
                 ]
 
-                # Synchronize user roles
+                # Synchronize roles
                 await self.user_repository.set_roles(
                     user_id=user.id,
                     role_ids=role_ids,
@@ -691,6 +608,16 @@ class UserUpdateService:
             await self.redis_cache.delete_pattern(
                 "users:search:*"
             )
+
+            # Invalidate statistics cache
+            # only when account status changed
+            if (
+                data.is_active is not None
+                and old_is_active != user.is_active
+            ):
+                await self.redis_cache.delete(
+                    "users:statistics"
+                )
 
             # ==============================
             # Record Successful Update
@@ -810,19 +737,6 @@ class UserUpdateService:
         Users can update their username, full name, email, and password.
         Changing the password requires verification of the current
         password.
-
-        Args:
-            user_id (int):
-                Identifier of the authenticated user.
-            data (UserSelfUpdate):
-                User profile fields to update.
-
-        Returns:
-            UserResponse: Updated user information.
-
-        Raises:
-            HTTPException: If the user does not exist, the current
-                password is missing or incorrect, or the update fails.
         """
 
         try:
@@ -1002,3 +916,52 @@ class UserUpdateService:
                 status_code=500,
                 detail="Failed to update user",
             )
+
+    # ==============================
+    # Get User Statistics
+    # ==============================
+
+    async def get_statistics(
+        self,
+    ) -> UserStatisticsResponse:
+        """
+        Returns user statistics.
+
+        Redis is checked first. PostgreSQL is queried only
+        when the statistics are not present in the cache.
+        """
+
+        # Redis cache key
+        cache_key = "users:statistics"
+
+        # Check Redis cache
+        cached_result = await self.redis_cache.get(
+            cache_key
+        )
+
+        if cached_result is not None:
+            return UserStatisticsResponse.model_validate(
+                cached_result
+            )
+
+        # Query PostgreSQL
+        statistics = (
+            await self.user_repository.get_statistics()
+        )
+
+        response = UserStatisticsResponse(
+            total=statistics["total"],
+            active=statistics["active"],
+            blocked=statistics["blocked"],
+        )
+
+        # Store statistics in Redis
+        await self.redis_cache.set(
+            cache_key,
+            response.model_dump(
+                mode="json"
+            ),
+            ttl=30,
+        )
+
+        return response
