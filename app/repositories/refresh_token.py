@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Repository Imports
 # ==============================
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,27 +12,44 @@ from models import RefreshToken
 
 
 # ==============================
-# Refresh tokena repozitorijs
+# Refresh Token Repository
 # ==============================
 
 class RefreshTokenRepository:
+    """
+    A repository for refresh token data storage and retrieval.
+    
+    Attributes:
+        session (AsyncSession): The asynchronous database session.
+    """
 
     def __init__(
         self,
         session: AsyncSession,
     ):
+        """
+        Initializes the repository with an asynchronous database session.
+        
+        Args:
+            session (AsyncSession): The asynchronous database session.
+        """
         # Datu bāzes sesija
         self.session = session
 
-    # ==============================
-    # Refresh tokena meklēšana pēc heša
-    # ==============================
-
+    # Get a refresh token by its hash
     async def get_by_hash(
         self,
         token_hash: str,
     ) -> RefreshToken | None:
-
+        """
+        Gets a refresh token by its hash.
+        
+        Args:
+            token_hash (str): The hash of the refresh token.
+        
+        Returns:
+            RefreshToken | None: The refresh token if found, otherwise None.
+        """
         result = await self.session.execute(
             select(RefreshToken).where(
                 RefreshToken.token_hash == token_hash
@@ -41,16 +58,20 @@ class RefreshTokenRepository:
 
         return result.scalar_one_or_none()
 
-    # ==============================
-    # Refresh tokena meklēšana
-    # ar rindas bloķēšanu
-    # ==============================
-
+    # Get a refresh token by its hash for update
     async def get_by_hash_for_update(
         self,
         token_hash: str,
     ) -> RefreshToken | None:
-
+        """
+        Gets a refresh token by its hash with row-level locking.
+        
+        Args:
+            token_hash (str): The hash of the refresh token.
+        
+        Returns:
+            RefreshToken | None: The refresh token if found, otherwise None.
+        """
         result = await self.session.execute(
             select(RefreshToken)
             .where(
@@ -61,15 +82,20 @@ class RefreshTokenRepository:
 
         return result.scalar_one_or_none()
 
-    # ==============================
-    # Refresh tokena izveide
-    # ==============================
-
+    # Create a new refresh token
     async def create(
         self,
         refresh_token: RefreshToken,
     ) -> RefreshToken:
-
+        """
+        Creates a new refresh token and adds it to the database.
+        
+        Args:
+            refresh_token (RefreshToken): The refresh token to be created.
+        
+        Returns:
+            RefreshToken: The newly created refresh token.
+        """
         self.session.add(
             refresh_token
         )
@@ -78,15 +104,20 @@ class RefreshTokenRepository:
 
         return refresh_token
 
-    # ==============================
-    # Refresh tokena atsaukšana
-    # ==============================
-
+    # Revoke a refresh token
     async def revoke(
         self,
         refresh_token: RefreshToken,
     ) -> RefreshToken:
-
+        """
+        Revokes a refresh token by setting its revoked flag to True.
+        
+        Args:
+            refresh_token (RefreshToken): The refresh token to be revoked.
+        
+        Returns:
+            RefreshToken: The revoked refresh token.
+        """
         refresh_token.revoked = True
 
         self.session.add(
@@ -97,16 +128,17 @@ class RefreshTokenRepository:
 
         return refresh_token
 
-    # ==============================
-    # Visu lietotāja refresh tokenu
-    # atsaukšana
-    # ==============================
-
+    # Revoke all refresh tokens for a user
     async def revoke_all_by_user(
         self,
         user_id: int,
     ) -> None:
-
+        """
+        Revokes all refresh tokens for a given user.
+        
+        Args:
+            user_id (int): The ID of the user.
+        """
         await self.session.execute(
             update(RefreshToken)
             .where(
@@ -120,16 +152,16 @@ class RefreshTokenRepository:
 
         await self.session.flush()
 
-    # ==============================
-    # Izmaiņu saglabāšana
-    # ==============================
-
+    # Commit changes to the database
     async def commit(self):
+        """
+        Commits the changes to the database.
+        """
         await self.session.commit()
 
-    # ==============================
-    # Izmaiņu atcelšana
-    # ==============================
-
+    # Rollback changes to the database
     async def rollback(self):
+        """
+        Rolls back the changes to the database.
+        """
         await self.session.rollback()
