@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library imports
 # ==============================
 
 from collections.abc import AsyncGenerator
@@ -17,10 +17,10 @@ import models
 
 
 # ==============================
-# Datu bāzes konfigurācija
+# Database configuration
 # ==============================
 
-# PostgreSQL savienojuma adrese
+# PostgreSQL connection string
 DATABASE_URL = (
     f"postgresql+asyncpg://"
     f"{settings.POSTGRES_USER}:"
@@ -32,10 +32,10 @@ DATABASE_URL = (
 
 
 # ==============================
-# Datu bāzes dzinējs
+# Database engine
 # ==============================
 
-# Asinhronā PostgreSQL dzinēja izveide
+# Asynchronous PostgreSQL engine creation
 engine: AsyncEngine = create_async_engine(
     DATABASE_URL,
     echo=True,
@@ -43,10 +43,19 @@ engine: AsyncEngine = create_async_engine(
 
 
 # ==============================
-# Datu bāzes sesija
+# Database session
 # ==============================
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    This function creates a database session.
+    
+    Args:
+        None
+    
+    Yields:
+        An asynchronous database session.
+    """
     async with AsyncSession(
         engine,
         expire_on_commit=False,
@@ -55,12 +64,22 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 # ==============================
-# Sākotnējo lomu inicializācija
+# Role initialization
 # ==============================
 
 async def init_roles(
     session: AsyncSession,
 ):
+    """
+    This function initializes the roles in the database.
+    
+    Args:
+        session (AsyncSession): The current database session.
+    
+    Returns:
+        None
+    """
+    # Define a list of role data
     roles = [
         {
             "name": "admin",
@@ -72,6 +91,7 @@ async def init_roles(
         },
     ]
 
+    # Iterate over the role data and check if they exist in the database
     for role_data in roles:
         result = await session.execute(
             select(models.Role).where(
@@ -82,6 +102,7 @@ async def init_roles(
         role = result.scalar_one_or_none()
 
         if role is None:
+            # If the role does not exist, add it to the database
             session.add(
                 models.Role(
                     name=role_data["name"],
@@ -89,21 +110,31 @@ async def init_roles(
                 )
             )
 
+    # Commit the changes to the database
     await session.commit()
 
 
 # ==============================
-# Datu bāzes inicializācija
+# Database initialization
 # ==============================
 
 async def init_db():
-    # Tabulu izveide
+    """
+    This function initializes the database.
+    
+    Args:
+        None
+    
+    Returns:
+        None
+    """
+    # Create the tables in the database
     async with engine.begin() as connection:
         await connection.run_sync(
             SQLModel.metadata.create_all
         )
 
-    # Sākotnējo datu izveide
+    # Initialize the roles and data in the database
     async with AsyncSession(
         engine,
         expire_on_commit=False,
