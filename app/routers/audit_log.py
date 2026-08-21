@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from fastapi import (
@@ -19,9 +19,8 @@ from facades.audit import AuditLogFacade
 
 from models import AuditAction
 
-from schemas.audit import (
-    AuditLogListResponse,
-)
+from schemas import AuditLogListResponse
+
 
 from utils import (
     JWTManager,
@@ -31,7 +30,7 @@ from utils import (
 
 
 # ==============================
-# JWT konfigurācija
+# JWT Configuration
 # ==============================
 
 jwt_manager = JWTManager(
@@ -48,7 +47,7 @@ jwt_auth = JWTAuth(
 
 
 # ==============================
-# Redis konfigurācija
+# Redis Configuration
 # ==============================
 
 redis_cache = RedisCache(
@@ -58,7 +57,7 @@ redis_cache = RedisCache(
 
 
 # ==============================
-# Audit žurnāla maršrutētājs
+# Audit Log Router
 # ==============================
 
 router = APIRouter(
@@ -68,7 +67,7 @@ router = APIRouter(
 
 
 # ==============================
-# Audit žurnāla meklēšana
+# Search Audit Logs
 # ==============================
 
 @router.get(
@@ -91,6 +90,22 @@ async def search_audit_logs(
         get_session
     ),
 ):
+    """
+    Searches audit logs by query, user ID, action, and success status.
+    
+    Args:
+        query (str | None): The search query. Defaults to None.
+        user_id (int | None): The ID of the user. Defaults to None.
+        action (AuditAction | None): The action type. Defaults to None.
+        success (bool | None): The success status. Defaults to None.
+        page (int): The page number. Defaults to 1.
+        page_size (int): The page size. Defaults to 20.
+        current_user (dict): The current user. Depends on JWTAuth.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        AuditLogListResponse: The list of audit logs.
+    """
     facade = AuditLogFacade(
         session=session,
         redis_cache=redis_cache,
@@ -107,7 +122,7 @@ async def search_audit_logs(
 
 
 # ==============================
-# Audit žurnāla CSV eksports
+# Export Audit Logs as CSV
 # ==============================
 
 @router.get(
@@ -127,6 +142,20 @@ async def export_audit_logs(
         get_session
     ),
 ):
+    """
+    Exports audit logs as CSV.
+    
+    Args:
+        query (str | None): The search query. Defaults to None.
+        user_id (int | None): The ID of the user. Defaults to None.
+        action (AuditAction | None): The action type. Defaults to None.
+        success (bool | None): The success status. Defaults to None.
+        current_user (dict): The current user. Depends on JWTAuth.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+    
+    Returns:
+        Response: The CSV data as a response.
+    """
     facade = AuditLogFacade(
         session=session,
         redis_cache=redis_cache,
