@@ -1,8 +1,11 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
-from datetime import datetime, timedelta
+from datetime import (
+    datetime, 
+    timedelta
+)
 
 from fastapi import HTTPException
 
@@ -30,10 +33,17 @@ from utils import (
 
 
 # ==============================
-# Refresh tokena serviss
+# Refresh Token Service
 # ==============================
 
 class RefreshTokenService:
+    """
+    Provides functionality for validating and rotating refresh tokens.
+
+    The service validates the current refresh token, checks its
+    expiration and revocation status, verifies the associated user,
+    generates new authentication tokens, and revokes the old token.
+    """
 
     def __init__(
         self,
@@ -43,42 +53,80 @@ class RefreshTokenService:
         refresh_token_manager: RefreshTokenManager,
         refresh_token_expire_days: int,
     ):
-        # Lietotāja repozitorijs
+        """
+        Initializes the refresh token service.
+
+        Args:
+            user_repository (UserRepository):
+                Repository used to access user data.
+            refresh_token_repository (RefreshTokenRepository):
+                Repository used to manage refresh tokens.
+            jwt_manager (JWTManager):
+                Utility used to create access tokens.
+            refresh_token_manager (RefreshTokenManager):
+                Utility used to generate and hash refresh tokens.
+            refresh_token_expire_days (int):
+                Number of days before a new refresh token expires.
+        """
+
+        # User repository
         self.user_repository = user_repository
 
-        # Refresh tokena repozitorijs
+        # Refresh token repository
         self.refresh_token_repository = (
             refresh_token_repository
         )
 
-        # JWT pārvaldnieks
+        # JWT manager
         self.jwt_manager = jwt_manager
 
-        # Refresh tokena pārvaldnieks
+        # Refresh token manager
         self.refresh_token_manager = (
             refresh_token_manager
         )
 
-        # Refresh tokena derīguma termiņš
+        # Refresh token expiration period
         self.refresh_token_expire_days = (
             refresh_token_expire_days
         )
 
-        # Audit žurnāla serviss
+        # Audit log service
         self.audit_log_service: AuditLogService | None = None
 
     # ==============================
-    # Refresh tokena rotācija
+    # Refresh Token Rotation
     # ==============================
 
     async def rotate(
         self,
         data: RefreshTokenRequest,
     ) -> TokenResponse:
+        """
+        Validates and rotates a refresh token.
+
+        The current refresh token is locked during the operation to
+        prevent concurrent reuse. A new access token and refresh token
+        are generated, while the previous refresh token is revoked.
+
+        If a revoked token is reused, all refresh tokens belonging to
+        the user are revoked as a security measure.
+
+        Args:
+            data (RefreshTokenRequest):
+                Request containing the refresh token to rotate.
+
+        Returns:
+            TokenResponse: Newly generated access and refresh tokens.
+
+        Raises:
+            HTTPException: If the refresh token is invalid, revoked,
+                expired, the associated user cannot be found, the user
+                account is inactive, or token rotation fails.
+        """
 
         try:
             # ==============================
-            # Refresh tokena hešošana
+            # Hash Refresh Token
             # ==============================
 
             token_hash = (
@@ -88,8 +136,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Tokena meklēšana un rindas
-            # bloķēšana
+            # Find and Lock Refresh Token
             # ==============================
 
             stored_token = (
@@ -100,7 +147,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Tokens nav atrasts
+            # Token Not Found
             # ==============================
 
             if stored_token is None:
@@ -110,12 +157,12 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Pārbauda tokena atsaukšanu
+            # Check Token Revocation
             # ==============================
 
             if stored_token.revoked:
 
-                # Iespējama tokena atkārtota izmantošana
+                # Revoke all user refresh tokens
                 await (
                     self.refresh_token_repository
                     .revoke_all_by_user(
@@ -128,7 +175,7 @@ class RefreshTokenService:
                     .commit()
                 )
 
-                # Audit ieraksts
+                # Record token reuse attempt
                 if self.audit_log_service is not None:
 
                     await self.audit_log_service.create(
@@ -146,12 +193,12 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Pārbauda tokena derīguma termiņu
+            # Check Token Expiration
             # ==============================
 
             if stored_token.expires_at <= datetime.now():
 
-                # Tokena atsaukšana
+                # Revoke the expired token
                 await (
                     self.refresh_token_repository
                     .revoke(
@@ -159,13 +206,13 @@ class RefreshTokenService:
                     )
                 )
 
-                # Izmaiņu saglabāšana
+                # Commit the changes
                 await (
                     self.refresh_token_repository
                     .commit()
                 )
 
-                # Audit ieraksts
+                # Record expired token attempt
                 if self.audit_log_service is not None:
 
                     await self.audit_log_service.create(
@@ -183,7 +230,7 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Lietotāja meklēšana
+            # Find User
             # ==============================
 
             user = await self.user_repository.get_by_id(
@@ -191,12 +238,12 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Lietotājs nav atrasts
+            # User Not Found
             # ==============================
 
             if user is None:
 
-                # Audit ieraksts
+                # Record failed token rotation
                 if self.audit_log_service is not None:
 
                     await self.audit_log_service.create(
@@ -215,12 +262,12 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Pārbauda lietotāja aktivitāti
+            # Check User Account Status
             # ==============================
 
             if not user.is_active:
 
-                # Audit ieraksts
+                # Record failed token rotation
                 if self.audit_log_service is not None:
 
                     await self.audit_log_service.create(
@@ -240,7 +287,7 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Pārbauda lietotāja ID
+            # Validate User ID
             # ==============================
 
             if user.id is None:
@@ -250,7 +297,7 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Lietotāja lomu iegūšana
+            # Get User Roles
             # ==============================
 
             roles = await self.user_repository.get_roles(
@@ -258,7 +305,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jauna access tokena izveide
+            # Create New Access Token
             # ==============================
 
             access_token = (
@@ -269,7 +316,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jauna refresh tokena ģenerēšana
+            # Generate New Refresh Token
             # ==============================
 
             new_refresh_token = (
@@ -277,7 +324,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jaunā refresh tokena hešošana
+            # Hash New Refresh Token
             # ==============================
 
             new_token_hash = (
@@ -287,7 +334,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jaunā tokena derīguma termiņš
+            # Calculate New Token Expiration
             # ==============================
 
             new_expires_at = (
@@ -298,7 +345,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Vecā tokena atsaukšana
+            # Revoke Old Refresh Token
             # ==============================
 
             await self.refresh_token_repository.revoke(
@@ -306,7 +353,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jaunā refresh tokena modeļa izveide
+            # Create New Refresh Token Model
             # ==============================
 
             new_refresh_token_model = RefreshToken(
@@ -316,7 +363,7 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Jaunā refresh tokena saglabāšana
+            # Save New Refresh Token
             # ==============================
 
             await self.refresh_token_repository.create(
@@ -324,13 +371,13 @@ class RefreshTokenService:
             )
 
             # ==============================
-            # Izmaiņu saglabāšana
+            # Commit Changes
             # ==============================
 
             await self.refresh_token_repository.commit()
 
             # ==============================
-            # Veiksmīgas rotācijas ieraksts
+            # Record Successful Rotation
             # ==============================
 
             if self.audit_log_service is not None:
@@ -346,7 +393,7 @@ class RefreshTokenService:
                 )
 
             # ==============================
-            # Tokenu atgriešana
+            # Return New Tokens
             # ==============================
 
             return TokenResponse(
@@ -356,12 +403,12 @@ class RefreshTokenService:
             )
 
         except HTTPException:
-            # HTTP kļūdu pārsūtīšana tālāk
+            # Re-raise HTTP errors without modification
             raise
 
         except Exception:
 
-            # Izmaiņu atcelšana
+            # Roll back the transaction
             await (
                 self.refresh_token_repository
                 .rollback()

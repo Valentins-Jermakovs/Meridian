@@ -1,8 +1,11 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
-from datetime import datetime, timedelta
+from datetime import (
+    datetime, 
+    timedelta
+)
 
 from fastapi import HTTPException
 
@@ -32,10 +35,17 @@ from utils import (
 
 
 # ==============================
-# Lietotāja autentifikācijas serviss
+# User Authentication Service
 # ==============================
 
 class LoginService:
+    """
+    Provides authentication logic for user login.
+
+    The service validates user credentials, checks account status,
+    generates access and refresh tokens, stores the refresh token,
+    and records successful or failed login attempts in the audit log.
+    """
 
     def __init__(
         self,
@@ -47,47 +57,85 @@ class LoginService:
         refresh_token_manager: RefreshTokenManager,
         refresh_token_expire_days: int,
     ):
-        # Lietotāja repozitorijs
+        """
+        Initializes the user authentication service.
+
+        Args:
+            user_repository (UserRepository):
+                Repository used to access user data.
+            refresh_token_repository (RefreshTokenRepository):
+                Repository used to manage refresh tokens.
+            normalizer (DataNormalizer):
+                Utility used to normalize user input.
+            password_manager (PasswordManager):
+                Utility used to verify user passwords.
+            jwt_manager (JWTManager):
+                Utility used to create access tokens.
+            refresh_token_manager (RefreshTokenManager):
+                Utility used to generate and hash refresh tokens.
+            refresh_token_expire_days (int):
+                Number of days before a refresh token expires.
+        """
+
+        # User repository
         self.user_repository = user_repository
 
-        # Refresh tokena repozitorijs
+        # Refresh token repository
         self.refresh_token_repository = (
             refresh_token_repository
         )
 
-        # Datu normalizators
+        # Data normalizer
         self.normalizer = normalizer
 
-        # Paroļu pārvaldnieks
+        # Password manager
         self.password_manager = password_manager
 
-        # JWT pārvaldnieks
+        # JWT manager
         self.jwt_manager = jwt_manager
 
-        # Refresh tokena pārvaldnieks
+        # Refresh token manager
         self.refresh_token_manager = (
             refresh_token_manager
         )
 
-        # Refresh tokena derīguma termiņš
+        # Refresh token expiration period
         self.refresh_token_expire_days = (
             refresh_token_expire_days
         )
 
-        # Audit žurnāla serviss
+        # Audit log service
         self.audit_log_service: AuditLogService | None = None
 
     # ==============================
-    # Lietotāja pieslēgšanās
+    # User Login
     # ==============================
 
     async def login(
         self,
         data: LoginRequest,
     ) -> TokenResponse:
+        """
+        Authenticates a user and generates authentication tokens.
+
+        The method normalizes the login identifier, validates the
+        user's credentials and account status, creates an access
+        token and refresh token, and records the login attempt.
+
+        Args:
+            data (LoginRequest): User login credentials.
+
+        Returns:
+            TokenResponse: Generated access and refresh tokens.
+
+        Raises:
+            HTTPException: If the credentials are invalid, the account
+                is inactive, the user ID is missing, or the refresh
+                token cannot be stored.
+        """
 
         # ==============================
-        # Ievaddatu normalizācija
+        # Normalize Input Data
         # ==============================
 
         login = self.normalizer.normalize_text(
@@ -95,7 +143,7 @@ class LoginService:
         )
 
         # ==============================
-        # Lietotāja meklēšana
+        # Find User
         # ==============================
 
         user = (
@@ -105,12 +153,12 @@ class LoginService:
         )
 
         # ==============================
-        # Lietotājs nav atrasts
+        # User Not Found
         # ==============================
 
         if user is None:
 
-            # Neveiksmīga pieslēgšanās
+            # Record failed login attempt
             if self.audit_log_service is not None:
 
                 await self.audit_log_service.create(
@@ -129,12 +177,12 @@ class LoginService:
             )
 
         # ==============================
-        # Pārbauda lietotāja aktivitāti
+        # Check User Account Status
         # ==============================
 
         if not user.is_active:
 
-            # Neveiksmīga pieslēgšanās
+            # Record failed login attempt
             if self.audit_log_service is not None:
 
                 await self.audit_log_service.create(
@@ -154,7 +202,7 @@ class LoginService:
             )
 
         # ==============================
-        # Pārbauda paroli
+        # Verify Password
         # ==============================
 
         password_valid = (
@@ -166,7 +214,7 @@ class LoginService:
 
         if not password_valid:
 
-            # Neveiksmīga pieslēgšanās
+            # Record failed login attempt
             if self.audit_log_service is not None:
 
                 await self.audit_log_service.create(
@@ -186,7 +234,7 @@ class LoginService:
             )
 
         # ==============================
-        # Pārbauda lietotāja ID
+        # Validate User ID
         # ==============================
 
         if user.id is None:
@@ -196,7 +244,7 @@ class LoginService:
             )
 
         # ==============================
-        # Lietotāja lomu iegūšana
+        # Get User Roles
         # ==============================
 
         roles = await self.user_repository.get_roles(
@@ -204,7 +252,7 @@ class LoginService:
         )
 
         # ==============================
-        # Access tokena izveide
+        # Create Access Token
         # ==============================
 
         access_token = (
@@ -215,7 +263,7 @@ class LoginService:
         )
 
         # ==============================
-        # Refresh tokena ģenerēšana
+        # Generate Refresh Token
         # ==============================
 
         raw_refresh_token = (
@@ -223,7 +271,7 @@ class LoginService:
         )
 
         # ==============================
-        # Refresh tokena hešošana
+        # Hash Refresh Token
         # ==============================
 
         token_hash = (
@@ -233,7 +281,7 @@ class LoginService:
         )
 
         # ==============================
-        # Refresh tokena termiņš
+        # Calculate Token Expiration
         # ==============================
 
         expires_at = (
@@ -244,7 +292,7 @@ class LoginService:
         )
 
         # ==============================
-        # Refresh tokena modeļa izveide
+        # Create Refresh Token Model
         # ==============================
 
         refresh_token = RefreshToken(
@@ -255,7 +303,7 @@ class LoginService:
 
         try:
             # ==============================
-            # Refresh tokena saglabāšana
+            # Save Refresh Token
             # ==============================
 
             await self.refresh_token_repository.create(
@@ -263,14 +311,14 @@ class LoginService:
             )
 
             # ==============================
-            # Izmaiņu saglabāšana
+            # Commit Changes
             # ==============================
 
             await self.refresh_token_repository.commit()
 
         except Exception:
 
-            # Izmaiņu atcelšana
+            # Roll back the transaction
             await self.refresh_token_repository.rollback()
 
             raise HTTPException(
@@ -279,7 +327,7 @@ class LoginService:
             )
 
         # ==============================
-        # Veiksmīgas pieslēgšanās ieraksts
+        # Record Successful Login
         # ==============================
 
         if self.audit_log_service is not None:
@@ -295,7 +343,7 @@ class LoginService:
             )
 
         # ==============================
-        # Tokenu atgriešana
+        # Return Authentication Tokens
         # ==============================
 
         return TokenResponse(

@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 import csv
@@ -15,7 +15,7 @@ from models import (
 
 from repositories import AuditLogRepository
 
-from schemas.audit import (
+from schemas import (
     AuditLogListItem,
     AuditLogListResponse,
 )
@@ -24,26 +24,40 @@ from utils import RedisCache
 
 
 # ==============================
-# Audit žurnāla serviss
+# Audit Log Service
 # ==============================
 
 class AuditLogService:
+    """
+    Provides business logic for creating, searching, caching,
+    and exporting audit log entries.
+    """
 
     def __init__(
         self,
         audit_log_repository: AuditLogRepository,
         redis_cache: RedisCache,
     ):
-        # Audit žurnāla repozitorijs
+        """
+        Initializes the audit log service.
+
+        Args:
+            audit_log_repository (AuditLogRepository):
+                Repository used to access audit log data.
+            redis_cache (RedisCache):
+                Redis cache used to store temporary search results.
+        """
+
+        # Audit log repository
         self.audit_log_repository = (
             audit_log_repository
         )
 
-        # Redis kešatmiņa
+        # Redis cache
         self.redis_cache = redis_cache
 
     # ==============================
-    # Audit ieraksta izveide
+    # Create Audit Log Entry
     # ==============================
 
     async def create(
@@ -53,9 +67,24 @@ class AuditLogService:
         description: str,
         success: bool = True,
     ) -> AuditLog:
+        """
+        Creates and saves a new audit log entry.
+
+        Args:
+            user_id (int | None): Identifier of the user who performed the action.
+            action (AuditAction): Type of action that was performed.
+            description (str): Description of the performed action.
+            success (bool): Indicates whether the action was successful.
+
+        Returns:
+            AuditLog: The newly created audit log entry.
+
+        Raises:
+            HTTPException: If the audit log cannot be created.
+        """
 
         try:
-            # Audit ieraksta izveide
+            # Create a new audit log entry
             audit_log = AuditLog(
                 user_id=user_id,
                 action=action,
@@ -63,21 +92,21 @@ class AuditLogService:
                 success=success,
             )
 
-            # Ieraksta saglabāšana
+            # Save the audit log entry
             audit_log = (
                 await self.audit_log_repository.create(
                     audit_log
                 )
             )
 
-            # Izmaiņu saglabāšana
+            # Commit the changes
             await self.audit_log_repository.commit()
 
             return audit_log
 
         except Exception:
 
-            # Izmaiņu atcelšana
+            # Roll back the transaction
             await self.audit_log_repository.rollback()
 
             raise HTTPException(
@@ -86,7 +115,7 @@ class AuditLogService:
             )
 
     # ==============================
-    # Audit žurnāla meklēšana
+    # Search Audit Logs
     # ==============================
 
     async def search(
@@ -98,9 +127,29 @@ class AuditLogService:
         page: int = 1,
         page_size: int = 20,
     ) -> AuditLogListResponse:
+        """
+        Searches audit log entries using the specified filters.
+
+        Search results are cached in Redis for a short period
+        to reduce repeated database queries.
+
+        Args:
+            query (str | None): Text used to search audit log descriptions.
+            user_id (int | None): Filter by user identifier.
+            action (AuditAction | None): Filter by action type.
+            success (bool | None): Filter by operation success status.
+            page (int): Page number to return.
+            page_size (int): Number of entries per page.
+
+        Returns:
+            AuditLogListResponse: Paginated audit log search results.
+
+        Raises:
+            HTTPException: If the page or page size is invalid.
+        """
 
         # ==============================
-        # Validācija
+        # Validation
         # ==============================
 
         if page < 1:
@@ -122,7 +171,7 @@ class AuditLogService:
             )
 
         # ==============================
-        # Normalizācija
+        # Normalization
         # ==============================
 
         if query is not None:
@@ -132,7 +181,7 @@ class AuditLogService:
                 query = None
 
         # ==============================
-        # Redis atslēga
+        # Generate Redis Cache Key
         # ==============================
 
         cache_key = (
@@ -146,7 +195,7 @@ class AuditLogService:
         )
 
         # ==============================
-        # Redis pārbaude
+        # Check Redis Cache
         # ==============================
 
         cached_result = await self.redis_cache.get(
@@ -159,7 +208,7 @@ class AuditLogService:
             )
 
         # ==============================
-        # PostgreSQL meklēšana
+        # Search PostgreSQL
         # ==============================
 
         logs, total = (
@@ -174,7 +223,7 @@ class AuditLogService:
         )
 
         # ==============================
-        # Atbildes elementu izveide
+        # Create Response Items
         # ==============================
 
         items = [
@@ -191,7 +240,7 @@ class AuditLogService:
         ]
 
         # ==============================
-        # Kopējais lapu skaits
+        # Calculate Total Pages
         # ==============================
 
         pages = ceil(
@@ -207,7 +256,7 @@ class AuditLogService:
         )
 
         # ==============================
-        # Redis saglabāšana
+        # Store Result in Redis
         # ==============================
 
         await self.redis_cache.set(
@@ -221,7 +270,7 @@ class AuditLogService:
         return response
 
     # ==============================
-    # Audit žurnāla CSV eksports
+    # Export Audit Logs to CSV
     # ==============================
 
     async def export_csv(
@@ -231,8 +280,27 @@ class AuditLogService:
         action: AuditAction | None = None,
         success: bool | None = None,
     ) -> bytes:
+        """
+        Exports filtered audit log entries as a CSV file.
 
-        # Meklēšanas teksta normalizācija
+        The CSV file is generated in memory and returned as UTF-8
+        encoded bytes. Formula injection protection is applied to
+        description values before writing them to the CSV file.
+
+        Args:
+            query (str | None): Text used to search audit log descriptions.
+            user_id (int | None): Filter by user identifier.
+            action (AuditAction | None): Filter by action type.
+            success (bool | None): Filter by operation success status.
+
+        Returns:
+            bytes: UTF-8 encoded CSV data with a BOM for Excel compatibility.
+
+        Raises:
+            HTTPException: If the audit log export fails.
+        """
+
+        # Normalize the search query
         if query is not None:
 
             query = query.strip()
@@ -241,7 +309,7 @@ class AuditLogService:
                 query = None
 
         try:
-            # Ierakstu iegūšana pēc meklēšanas parametriem
+            # Retrieve audit log entries using the specified filters
             logs = (
                 await self.audit_log_repository.export(
                     query=query,
@@ -251,7 +319,7 @@ class AuditLogService:
                 )
             )
 
-            # CSV izveide atmiņā
+            # Create the CSV file in memory
             output = io.StringIO(
                 newline=""
             )
@@ -263,7 +331,7 @@ class AuditLogService:
                 lineterminator="\n",
             )
 
-            # CSV galvene
+            # Write the CSV header
             writer.writerow(
                 [
                     "ID",
@@ -275,10 +343,10 @@ class AuditLogService:
                 ]
             )
 
-            # Ierakstu pievienošana
+            # Write audit log entries
             for log in logs:
 
-                # CSV formula injection aizsardzība
+                # Protect against CSV formula injection
                 description = (
                     log.description
                 )
@@ -306,7 +374,7 @@ class AuditLogService:
                     ]
                 )
 
-            # UTF-8 BOM Excel saderībai
+            # Add UTF-8 BOM for Excel compatibility
             return (
                 "\ufeff"
                 + output.getvalue()

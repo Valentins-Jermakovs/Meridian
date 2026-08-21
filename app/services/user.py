@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from math import ceil
@@ -34,10 +34,18 @@ from utils import (
 
 
 # ==============================
-# Lietotāja atjaunošanas serviss
+# User Update Service
 # ==============================
 
 class UserUpdateService:
+    """
+    Provides functionality for retrieving, searching, and updating
+    user accounts.
+
+    The service supports both administrator updates and self-service
+    profile updates. It also handles role management, password changes,
+    Redis caching, and audit logging.
+    """
 
     def __init__(
         self,
@@ -47,26 +55,42 @@ class UserUpdateService:
         password_manager: PasswordManager,
         redis_cache: RedisCache,
     ):
-        # Lietotāja repozitorijs
+        """
+        Initializes the user update service.
+
+        Args:
+            user_repository (UserRepository):
+                Repository used to access and update user data.
+            role_repository (RoleRepository):
+                Repository used to access and manage user roles.
+            normalizer (DataNormalizer):
+                Utility used to normalize user input.
+            password_manager (PasswordManager):
+                Utility used to hash and verify passwords.
+            redis_cache (RedisCache):
+                Cache used to store frequently requested user data.
+        """
+
+        # User repository
         self.user_repository = user_repository
 
-        # Lomas repozitorijs
+        # Role repository
         self.role_repository = role_repository
 
-        # Datu normalizators
+        # Data normalizer
         self.normalizer = normalizer
 
-        # Paroļu pārvaldnieks
+        # Password manager
         self.password_manager = password_manager
 
-        # Redis kešatmiņa
+        # Redis cache
         self.redis_cache = redis_cache
 
-        # Audit žurnāla serviss
+        # Audit log service
         self.audit_log_service: AuditLogService | None = None
 
     # ==============================
-    # Audit ieraksta izveide
+    # Create Audit Log Entry
     # ==============================
 
     async def _audit(
@@ -76,6 +100,22 @@ class UserUpdateService:
         description: str,
         success: bool,
     ) -> None:
+        """
+        Creates an audit log entry without affecting the main operation.
+
+        Audit logging errors are intentionally ignored so that a failure
+        in the audit subsystem does not interrupt the user operation.
+
+        Args:
+            user_id (int | None):
+                Identifier of the user associated with the action.
+            action (AuditAction):
+                Type of action being recorded.
+            description (str):
+                Description of the performed action.
+            success (bool):
+                Indicates whether the action was successful.
+        """
 
         if self.audit_log_service is None:
             return
@@ -89,18 +129,29 @@ class UserUpdateService:
             )
 
         except Exception:
-            # Audit kļūda nedrīkst ietekmēt
-            # galveno lietotāja darbību
+            # Audit logging errors must not affect the main operation
             pass
 
     # ==============================
-    # Lietotāja atbildes shēmas izveide
+    # Build User Response
     # ==============================
 
     async def _build_user_response(
         self,
         user: User,
     ) -> UserResponse:
+        """
+        Builds a UserResponse object from a user model.
+
+        Args:
+            user (User): User model used to build the response.
+
+        Returns:
+            UserResponse: Serialized user information including roles.
+
+        Raises:
+            HTTPException: If the user does not have a generated ID.
+        """
 
         if user.id is None:
             raise HTTPException(
@@ -108,6 +159,7 @@ class UserUpdateService:
                 detail="User ID was not generated",
             )
 
+        # Retrieve the user's roles
         roles = await self.user_repository.get_roles(
             user.id
         )
@@ -123,18 +175,33 @@ class UserUpdateService:
         )
 
     # ==============================
-    # Lietotāja meklēšana pēc ID
+    # Get User by ID
     # ==============================
 
     async def get_by_id(
         self,
         user_id: int,
     ) -> UserResponse:
+        """
+        Retrieves a user by ID.
 
-        # Redis atslēga
+        The method first checks Redis and only queries PostgreSQL
+        when the requested user is not present in the cache.
+
+        Args:
+            user_id (int): Identifier of the requested user.
+
+        Returns:
+            UserResponse: Requested user information.
+
+        Raises:
+            HTTPException: If the user does not exist.
+        """
+
+        # Redis cache key
         cache_key = f"user:{user_id}"
 
-        # Meklē Redis kešatmiņā
+        # Check Redis cache
         cached_user = await self.redis_cache.get(
             cache_key
         )
@@ -144,7 +211,7 @@ class UserUpdateService:
                 cached_user
             )
 
-        # Meklē PostgreSQL
+        # Query PostgreSQL
         user = await self.user_repository.get_by_id(
             user_id
         )
@@ -155,12 +222,12 @@ class UserUpdateService:
                 detail="User not found",
             )
 
-        # Izveido atbildi
+        # Build response
         response = await self._build_user_response(
             user
         )
 
-        # Saglabā Redis
+        # Store response in Redis
         await self.redis_cache.set(
             cache_key,
             response.model_dump(
@@ -171,7 +238,7 @@ class UserUpdateService:
         return response
 
     # ==============================
-    # Lietotāja datu atjaunošana
+    # Update User Data
     # ==============================
 
     async def _update_user(
@@ -183,8 +250,35 @@ class UserUpdateService:
         password: str | None = None,
         is_active: bool | None = None,
     ) -> User:
+        """
+        Applies the provided changes to a user model.
 
-        # Lietotājvārda atjaunošana
+        Only fields explicitly provided to the method are modified.
+        Username and email uniqueness are checked before applying
+        corresponding changes.
+
+        Args:
+            user (User):
+                User model to update.
+            username (str | None):
+                New username, if provided.
+            full_name (str | None):
+                New full name, if provided.
+            email (str | None):
+                New email address, if provided.
+            password (str | None):
+                New password, if provided.
+            is_active (bool | None):
+                New account status, if provided.
+
+        Returns:
+            User: Updated user model.
+
+        Raises:
+            HTTPException: If the new username or email is already used.
+        """
+
+        # Update username
         if username is not None:
 
             username = (
@@ -209,7 +303,7 @@ class UserUpdateService:
 
                 user.username = username
 
-        # Pilnā vārda atjaunošana
+        # Update full name
         if full_name is not None:
 
             user.full_name = (
@@ -218,7 +312,7 @@ class UserUpdateService:
                 )
             )
 
-        # E-pasta atjaunošana
+        # Update email
         if email is not None:
 
             email = (
@@ -243,7 +337,7 @@ class UserUpdateService:
 
                 user.email = email
 
-        # Paroles atjaunošana
+        # Update password
         if password is not None:
 
             user.password_hash = (
@@ -252,7 +346,7 @@ class UserUpdateService:
                 )
             )
 
-        # Konta aktivitātes statusa atjaunošana
+        # Update account status
         if is_active is not None:
 
             user.is_active = is_active
@@ -260,7 +354,7 @@ class UserUpdateService:
         return user
 
     # ==============================
-    # Lietotāju meklēšana ar lapošanu
+    # Search Users with Pagination
     # ==============================
 
     async def search(
@@ -269,29 +363,46 @@ class UserUpdateService:
         page: int = 1,
         page_size: int = 20,
     ) -> UserListResponse:
+        """
+        Searches users with pagination and Redis caching.
 
-        # Lappuses validācija
+        Args:
+            query (str | None):
+                Optional search text.
+            page (int):
+                Page number starting from 1.
+            page_size (int):
+                Number of users per page. Maximum value is 100.
+
+        Returns:
+            UserListResponse: Paginated list of matching users.
+
+        Raises:
+            HTTPException: If the pagination parameters are invalid.
+        """
+
+        # Validate page number
         if page < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page must be greater than 0",
             )
 
-        # Lapas izmēra validācija
+        # Validate page size
         if page_size < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page size must be greater than 0",
             )
 
-        # Maksimālais lietotāju skaits vienā lapā
+        # Limit the maximum page size
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
                 detail="Page size cannot exceed 100",
             )
 
-        # Meklēšanas teksta normalizācija
+        # Normalize search text
         if query is not None:
 
             query = self.normalizer.normalize_text(
@@ -301,7 +412,7 @@ class UserUpdateService:
             if not query:
                 query = None
 
-        # Redis atslēga
+        # Redis cache key
         cache_key = (
             f"users:search:"
             f"{query or 'all'}:"
@@ -309,7 +420,7 @@ class UserUpdateService:
             f"{page_size}"
         )
 
-        # Meklē Redis kešatmiņā
+        # Check Redis cache
         cached_result = await self.redis_cache.get(
             cache_key
         )
@@ -319,7 +430,7 @@ class UserUpdateService:
                 cached_result
             )
 
-        # Meklē PostgreSQL
+        # Query PostgreSQL
         users, total = (
             await self.user_repository.search(
                 query=query,
@@ -328,7 +439,7 @@ class UserUpdateService:
             )
         )
 
-        # Lietotāju saraksta izveide
+        # Build user list
         items = [
             UserListItem(
                 id=user.id,
@@ -341,7 +452,7 @@ class UserUpdateService:
             if user.id is not None
         ]
 
-        # Kopējais lapu skaits
+        # Calculate total number of pages
         pages = ceil(
             total / page_size
         )
@@ -354,7 +465,7 @@ class UserUpdateService:
             pages=pages,
         )
 
-        # Saglabā Redis
+        # Store response in Redis
         await self.redis_cache.set(
             cache_key,
             response.model_dump(
@@ -365,8 +476,7 @@ class UserUpdateService:
         return response
 
     # ==============================
-    # Lietotāja atjaunošana
-    # administratora režīmā
+    # Administrator User Update
     # ==============================
 
     async def update_by_admin(
@@ -375,9 +485,35 @@ class UserUpdateService:
         user_id: int,
         data: UserAdminUpdate,
     ) -> UserResponse:
+        """
+        Updates another user's account using administrator privileges.
+
+        Administrators can update user information, account status,
+        password, and roles. An administrator cannot update their
+        own account through this method.
+
+        Args:
+            admin_id (int):
+                Identifier of the administrator performing the update.
+            user_id (int):
+                Identifier of the user being updated.
+            data (UserAdminUpdate):
+                User data to update.
+
+        Returns:
+            UserResponse: Updated user information.
+
+        Raises:
+            HTTPException: If the administrator attempts to update
+                themselves, the user does not exist, a role is invalid,
+                or the update fails.
+        """
 
         try:
-            # Administrators nevar atjaunot pats sevi
+            # ==============================
+            # Prevent Self-Administration
+            # ==============================
+
             if admin_id == user_id:
 
                 await self._audit(
@@ -395,7 +531,10 @@ class UserUpdateService:
                     detail="Administrator cannot update themselves",
                 )
 
-            # Lietotāja meklēšana
+            # ==============================
+            # Find User
+            # ==============================
+
             user = await self.user_repository.get_by_id(
                 user_id
             )
@@ -417,10 +556,13 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
-            # Lietotāja sākotnējais statuss
+            # Store the original account status
             old_is_active = user.is_active
 
-            # Lietotāja datu atjaunošana
+            # ==============================
+            # Update User Data
+            # ==============================
+
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -434,16 +576,19 @@ class UserUpdateService:
                 is_active=data.is_active,
             )
 
-            # Lietotāja lomu atjaunošana
+            # ==============================
+            # Update User Roles
+            # ==============================
+
             if data.roles is not None:
 
-                # Normalizē lomu nosaukumus
+                # Normalize role names
                 role_names = [
                     role.strip().lower()
                     for role in data.roles
                 ]
 
-                # Pārbauda, vai nav tukšas lomas
+                # Ensure at least one role is provided
                 if not role_names:
 
                     await self._audit(
@@ -462,21 +607,21 @@ class UserUpdateService:
                         detail="At least one role is required",
                     )
 
-                # Noņem dublikātus
+                # Remove duplicate role names
                 role_names = list(
                     dict.fromkeys(
                         role_names
                     )
                 )
 
-                # Atrod lomas datu bāzē
+                # Find roles in the database
                 roles = (
                     await self.role_repository.get_by_names(
                         role_names
                     )
                 )
 
-                # Pārbauda, vai visas lomas eksistē
+                # Check that all requested roles exist
                 found_role_names = {
                     role.name
                     for role in roles
@@ -510,38 +655,47 @@ class UserUpdateService:
                         ),
                     )
 
-                # ID atrastajām lomām
+                # Collect IDs of the requested roles
                 role_ids = [
                     role.id
                     for role in roles
                     if role.id is not None
                 ]
 
-                # Lomu sinhronizācija
+                # Synchronize user roles
                 await self.user_repository.set_roles(
                     user_id=user.id,
                     role_ids=role_ids,
                 )
 
-            # Lietotāja saglabāšana
+            # ==============================
+            # Save User
+            # ==============================
+
             user = await self.user_repository.update(
                 user
             )
 
-            # Izmaiņu saglabāšana
+            # Commit changes
             await self.user_repository.commit()
 
-            # Dzēš lietotāja kešu
+            # ==============================
+            # Invalidate User Cache
+            # ==============================
+
             await self.redis_cache.delete(
                 f"user:{user.id}"
             )
 
-            # Notīra meklēšanas kešu
+            # Invalidate user search cache
             await self.redis_cache.delete_pattern(
                 "users:search:*"
             )
 
-            # Veiksmīgs administratora atjauninājums
+            # ==============================
+            # Record Successful Update
+            # ==============================
+
             await self._audit(
                 user_id=admin_id,
                 action=AuditAction.ADMIN_UPDATE_USER,
@@ -552,7 +706,10 @@ class UserUpdateService:
                 success=True,
             )
 
-            # Lomu maiņas ieraksts
+            # ==============================
+            # Record Role Changes
+            # ==============================
+
             if data.roles is not None:
 
                 await self._audit(
@@ -565,7 +722,10 @@ class UserUpdateService:
                     success=True,
                 )
 
-            # Konta statusa maiņas ieraksts
+            # ==============================
+            # Record Account Status Changes
+            # ==============================
+
             if (
                 data.is_active is not None
                 and old_is_active != user.is_active
@@ -588,7 +748,10 @@ class UserUpdateService:
                     success=True,
                 )
 
-            # Paroles maiņas ieraksts
+            # ==============================
+            # Record Password Changes
+            # ==============================
+
             if data.password is not None:
 
                 await self._audit(
@@ -601,7 +764,10 @@ class UserUpdateService:
                     success=True,
                 )
 
-            # Lietotāja atbildes izveide
+            # ==============================
+            # Build User Response
+            # ==============================
+
             return await self._build_user_response(
                 user
             )
@@ -611,6 +777,7 @@ class UserUpdateService:
 
         except Exception:
 
+            # Roll back database changes
             await self.user_repository.rollback()
 
             await self._audit(
@@ -629,7 +796,7 @@ class UserUpdateService:
             )
 
     # ==============================
-    # Paša lietotāja datu atjaunošana
+    # Self User Update
     # ==============================
 
     async def update_self(
@@ -637,9 +804,32 @@ class UserUpdateService:
         user_id: int,
         data: UserSelfUpdate,
     ) -> UserResponse:
+        """
+        Updates the authenticated user's own profile.
+
+        Users can update their username, full name, email, and password.
+        Changing the password requires verification of the current
+        password.
+
+        Args:
+            user_id (int):
+                Identifier of the authenticated user.
+            data (UserSelfUpdate):
+                User profile fields to update.
+
+        Returns:
+            UserResponse: Updated user information.
+
+        Raises:
+            HTTPException: If the user does not exist, the current
+                password is missing or incorrect, or the update fails.
+        """
 
         try:
-            # Lietotāja meklēšana
+            # ==============================
+            # Find User
+            # ==============================
+
             user = await self.user_repository.get_by_id(
                 user_id
             )
@@ -661,10 +851,13 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
-            # Paroles pārbaude
+            # ==============================
+            # Validate Password Change
+            # ==============================
+
             if data.password is not None:
 
-                # Pašreizējā parole nav norādīta
+                # Current password is required
                 if data.current_password is None:
 
                     await self._audit(
@@ -683,8 +876,7 @@ class UserUpdateService:
                         detail="Current password is required",
                     )
 
-                # Pašreizējā parole
-                # tiek pārbaudīta asinhroni
+                # Verify current password asynchronously
                 password_valid = (
                     await self.password_manager.verify_password(
                         data.current_password,
@@ -710,7 +902,10 @@ class UserUpdateService:
                         detail="Current password is incorrect",
                     )
 
-            # Lietotāja datu atjaunošana
+            # ==============================
+            # Update User Data
+            # ==============================
+
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -723,25 +918,34 @@ class UserUpdateService:
                 password=data.password,
             )
 
-            # Lietotāja saglabāšana
+            # ==============================
+            # Save User
+            # ==============================
+
             user = await self.user_repository.update(
                 user
             )
 
-            # Izmaiņu saglabāšana
+            # Commit changes
             await self.user_repository.commit()
 
-            # Dzēš lietotāja kešu
+            # ==============================
+            # Invalidate User Cache
+            # ==============================
+
             await self.redis_cache.delete(
                 f"user:{user.id}"
             )
 
-            # Notīra meklēšanas kešu
+            # Invalidate user search cache
             await self.redis_cache.delete_pattern(
                 "users:search:*"
             )
 
-            # Veiksmīgs atjauninājums
+            # ==============================
+            # Record Successful Update
+            # ==============================
+
             await self._audit(
                 user_id=user.id,
                 action=AuditAction.UPDATE_SELF,
@@ -752,7 +956,10 @@ class UserUpdateService:
                 success=True,
             )
 
-            # Paroles maiņas ieraksts
+            # ==============================
+            # Record Password Change
+            # ==============================
+
             if data.password is not None:
 
                 await self._audit(
@@ -765,7 +972,10 @@ class UserUpdateService:
                     success=True,
                 )
 
-            # Lietotāja atbildes izveide
+            # ==============================
+            # Build User Response
+            # ==============================
+
             return await self._build_user_response(
                 user
             )
@@ -775,6 +985,7 @@ class UserUpdateService:
 
         except Exception:
 
+            # Roll back database changes
             await self.user_repository.rollback()
 
             await self._audit(

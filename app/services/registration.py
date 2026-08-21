@@ -1,5 +1,5 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from fastapi import HTTPException
@@ -28,10 +28,17 @@ from utils import (
 
 
 # ==============================
-# Lietotāja reģistrācijas serviss
+# User Registration Service
 # ==============================
 
 class RegistrationService:
+    """
+    Provides functionality for registering new users.
+
+    The service normalizes user input, checks username and email
+    uniqueness, hashes the user's password, assigns the default
+    user role, and records the registration in the audit log.
+    """
 
     def __init__(
         self,
@@ -40,29 +47,68 @@ class RegistrationService:
         normalizer: DataNormalizer,
         password_manager: PasswordManager,
     ):
-        # Lietotāja repozitorijs
+        """
+        Initializes the user registration service.
+
+        Args:
+            user_repository (UserRepository):
+                Repository used to access and manage user data.
+            role_repository (RoleRepository):
+                Repository used to access user roles.
+            normalizer (DataNormalizer):
+                Utility used to normalize user input.
+            password_manager (PasswordManager):
+                Utility used to securely hash user passwords.
+        """
+
+        # User repository
         self.user_repository = user_repository
 
-        # Lomu repozitorijs
+        # Role repository
         self.role_repository = role_repository
 
-        # Datu normalizators
+        # Data normalizer
         self.normalizer = normalizer
 
-        # Paroļu pārvaldnieks
+        # Password manager
         self.password_manager = password_manager
 
-        # Audit žurnāla serviss
+        # Audit log service
         self.audit_log_service: AuditLogService | None = None
 
-    # Lietotāja reģistrācija
+    # ==============================
+    # User Registration
+    # ==============================
+
     async def register(
         self,
         data: UserCreate,
     ) -> UserResponse:
+        """
+        Registers a new user account.
+
+        The method normalizes the provided user data, checks whether
+        the username and email are already registered, hashes the
+        password, creates the user, assigns the default user role,
+        and returns the created user information.
+
+        Args:
+            data (UserCreate): Data required to create a new user.
+
+        Returns:
+            UserResponse: Information about the newly registered user.
+
+        Raises:
+            HTTPException: If the username or email already exists,
+                the default role cannot be found, required IDs are
+                missing, or registration fails.
+        """
 
         try:
-            # Ievaddatu normalizācija
+            # ==============================
+            # Normalize Input Data
+            # ==============================
+
             username = (
                 self.normalizer.normalize_username(
                     data.username
@@ -81,7 +127,10 @@ class RegistrationService:
                 )
             )
 
-            # Pārbauda, vai lietotājvārds jau eksistē
+            # ==============================
+            # Check Username Uniqueness
+            # ==============================
+
             existing_user = (
                 await self.user_repository.get_by_username(
                     username
@@ -90,7 +139,7 @@ class RegistrationService:
 
             if existing_user is not None:
 
-                # Neveiksmīga reģistrācija
+                # Record failed registration
                 if self.audit_log_service is not None:
                     await self.audit_log_service.create(
                         user_id=None,
@@ -107,7 +156,10 @@ class RegistrationService:
                     detail="Username already exists",
                 )
 
-            # Pārbauda, vai e-pasts jau eksistē
+            # ==============================
+            # Check Email Uniqueness
+            # ==============================
+
             existing_user = (
                 await self.user_repository.get_by_email(
                     email
@@ -116,7 +168,7 @@ class RegistrationService:
 
             if existing_user is not None:
 
-                # Neveiksmīga reģistrācija
+                # Record failed registration
                 if self.audit_log_service is not None:
                     await self.audit_log_service.create(
                         user_id=None,
@@ -133,7 +185,10 @@ class RegistrationService:
                     detail="Email already exists",
                 )
 
-            # Meklē noklusējuma lomu
+            # ==============================
+            # Find Default User Role
+            # ==============================
+
             role = await self.role_repository.get_by_name(
                 "user"
             )
@@ -144,14 +199,20 @@ class RegistrationService:
                     detail="Default role 'user' not found",
                 )
 
-            # Paroles hešošana
+            # ==============================
+            # Hash Password
+            # ==============================
+
             password_hash = (
                 self.password_manager.hash_password(
                     data.password
                 )
             )
 
-            # Lietotāja objekta izveide
+            # ==============================
+            # Create User Model
+            # ==============================
+
             user = User(
                 username=username,
                 full_name=full_name,
@@ -159,10 +220,17 @@ class RegistrationService:
                 password_hash=password_hash,
             )
 
-            # Lietotāja saglabāšana
+            # ==============================
+            # Save User
+            # ==============================
+
             user = await self.user_repository.create(
                 user
             )
+
+            # ==============================
+            # Validate User ID
+            # ==============================
 
             if user.id is None:
                 raise HTTPException(
@@ -170,27 +238,43 @@ class RegistrationService:
                     detail="User ID was not generated",
                 )
 
+            # ==============================
+            # Validate Role ID
+            # ==============================
+
             if role.id is None:
                 raise HTTPException(
                     status_code=500,
                     detail="Role ID was not generated",
                 )
 
-            # Noklusējuma lomas piešķiršana
+            # ==============================
+            # Assign Default User Role
+            # ==============================
+
             await self.user_repository.add_role(
                 user.id,
                 role.id,
             )
 
-            # Izmaiņu saglabāšana
+            # ==============================
+            # Commit Changes
+            # ==============================
+
             await self.user_repository.commit()
 
-            # Lietotāja lomu iegūšana
+            # ==============================
+            # Get User Roles
+            # ==============================
+
             roles = await self.user_repository.get_roles(
                 user.id
             )
 
-            # Veiksmīgas reģistrācijas ieraksts
+            # ==============================
+            # Record Successful Registration
+            # ==============================
+
             if self.audit_log_service is not None:
                 await self.audit_log_service.create(
                     user_id=user.id,
@@ -202,7 +286,10 @@ class RegistrationService:
                     success=True,
                 )
 
-            # Lietotāja atbildes shēmas izveide
+            # ==============================
+            # Create User Response
+            # ==============================
+
             return UserResponse(
                 id=user.id,
                 username=user.username,
@@ -214,11 +301,11 @@ class RegistrationService:
             )
 
         except HTTPException:
-            # HTTP kļūdas pārsūtīšana tālāk
+            # Re-raise HTTP errors without modification
             raise
 
         except Exception:
-            # Izmaiņu atcelšana
+            # Roll back the transaction
             await self.user_repository.rollback()
 
             raise HTTPException(
