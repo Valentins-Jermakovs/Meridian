@@ -1,15 +1,21 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
-from sqlmodel import SQLModel
+from pydantic import BaseModel
 
 
 # ==============================
-# Refresh tokena atjaunošanas shēma
+# Refresh Token Request Schema
 # ==============================
 
-class RefreshTokenRequest(SQLModel):
+class RefreshTokenRequest(BaseModel):
+    """
+    Represents a request to refresh an access token.
 
-    # Refresh tokens
+    Attributes:
+        refresh_token (str): Refresh token used to obtain a new access token.
+    """
+
+    # Refresh token used to obtain a new access token
     refresh_token: str

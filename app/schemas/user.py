@@ -1,35 +1,48 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from datetime import datetime
 
-from pydantic import EmailStr
-from sqlmodel import Field, SQLModel
+from pydantic import (
+    EmailStr,
+    BaseModel,
+)
+
+from sqlmodel import Field
 
 
 # ==============================
-# Lietotāja izveides shēma
+# User Create Schema
 # ==============================
 
-class UserCreate(SQLModel):
+class UserCreate(BaseModel):
+    """
+    Represents the data required to create a new user account.
 
-    # Lietotājvārds
+    Attributes:
+        username (str): Unique username of the user.
+        full_name (str): Full name of the user.
+        email (EmailStr): Valid email address of the user.
+        password (str): Password for the user account.
+    """
+
+    # Username
     username: str = Field(
         min_length=5,
         max_length=100,
     )
 
-    # Pilnais vārds
+    # Full name
     full_name: str = Field(
         min_length=10,
         max_length=255,
     )
 
-    # E-pasta adrese
+    # Email address
     email: EmailStr
 
-    # Parole
+    # Password
     password: str = Field(
         min_length=8,
         max_length=255,
@@ -37,36 +50,46 @@ class UserCreate(SQLModel):
 
 
 # ==============================
-# Lietotāja pašatjaunošanas shēma
+# User Self-Update Schema
 # ==============================
 
-class UserSelfUpdate(SQLModel):
+class UserSelfUpdate(BaseModel):
+    """
+    Represents the data a user can update for their own account.
 
-    # Lietotājvārds
+    Attributes:
+        username (str | None): New username.
+        full_name (str | None): New full name.
+        email (EmailStr | None): New email address.
+        current_password (str | None): Current password used for verification.
+        password (str | None): New password.
+    """
+
+    # Username
     username: str | None = Field(
         default=None,
         min_length=5,
         max_length=100,
     )
 
-    # Pilnais vārds
+    # Full name
     full_name: str | None = Field(
         default=None,
         min_length=10,
         max_length=255,
     )
 
-    # E-pasta adrese
+    # Email address
     email: EmailStr | None = None
 
-    # Pašreizējā parole
+    # Current password
     current_password: str | None = Field(
         default=None,
         min_length=1,
         max_length=255,
     )
 
-    # Jaunā parole
+    # New password
     password: str | None = Field(
         default=None,
         min_length=8,
@@ -75,114 +98,152 @@ class UserSelfUpdate(SQLModel):
 
 
 # ==============================
-# Lietotāja administratora
-# atjaunošanas shēma
+# User Admin Update Schema
 # ==============================
 
-class UserAdminUpdate(SQLModel):
+class UserAdminUpdate(BaseModel):
+    """
+    Represents the data an administrator can update for a user account.
 
-    # Lietotājvārds
+    Attributes:
+        username (str | None): New username.
+        full_name (str | None): New full name.
+        email (EmailStr | None): New email address.
+        password (str | None): New password.
+        is_active (bool | None): Account activity status.
+        roles (list[str] | None): List of roles assigned to the user.
+    """
+
+    # Username
     username: str | None = Field(
         default=None,
         min_length=5,
         max_length=100,
     )
 
-    # Pilnais vārds
+    # Full name
     full_name: str | None = Field(
         default=None,
         min_length=10,
         max_length=255,
     )
 
-    # E-pasta adrese
+    # Email address
     email: EmailStr | None = None
 
-    # Jaunā parole
+    # New password
     password: str | None = Field(
         default=None,
         min_length=8,
         max_length=255,
     )
 
-    # Konta aktivitātes statuss
+    # Account activity status
     is_active: bool | None = None
 
-    # Lietotāja lomas
+    # User roles
     roles: list[str] | None = None
 
 
 # ==============================
-# Lietotāja pilnā atbildes shēma
+# Full User Response Schema
 # ==============================
 
-# ==============================
-# Lietotāja pilnā atbildes shēma
-# ==============================
+class UserResponse(BaseModel):
+    """
+    Represents the complete user information returned by the API.
 
-class UserResponse(SQLModel):
+    Attributes:
+        id (int): Unique identifier of the user.
+        username (str): Username of the user.
+        full_name (str): Full name of the user.
+        email (EmailStr): Email address of the user.
+        roles (list[str]): Roles assigned to the user.
+        is_active (bool): Indicates whether the user account is active.
+        created_at (datetime): Timestamp when the user account was created.
+    """
 
-    # Lietotāja identifikators
+    # User identifier
     id: int
 
-    # Lietotājvārds
+    # Username
     username: str
 
-    # Lietotāja pilnais vārds
+    # Full name
     full_name: str
 
-    # Lietotāja e-pasta adrese
+    # User email address
     email: EmailStr
 
-    # Lietotāja lomas
+    # User roles
     roles: list[str]
 
-    # Lietotāja konta aktivitātes statuss
+    # User account activity status
     is_active: bool
 
-    # Lietotāja izveidošanas datums
+    # User creation timestamp
     created_at: datetime
 
 
 # ==============================
-# Lietotāja saraksta elementa shēma
+# User List Item Schema
 # ==============================
 
-class UserListItem(SQLModel):
+class UserListItem(BaseModel):
+    """
+    Represents a single user in a paginated user list.
 
-    # Lietotāja identifikators
+    Attributes:
+        id (int): Unique identifier of the user.
+        username (str): Username of the user.
+        full_name (str): Full name of the user.
+        email (EmailStr): Email address of the user.
+        is_active (bool): Indicates whether the user account is active.
+    """
+
+    # User identifier
     id: int
 
-    # Lietotājvārds
+    # Username
     username: str
 
-    # Pilnais vārds
+    # Full name
     full_name: str
 
-    # E-pasta adrese
+    # Email address
     email: EmailStr
 
-    # Konta aktivitātes statuss
+    # Account activity status
     is_active: bool
 
 
 # ==============================
-# Lietotāju saraksta atbildes shēma
+# User List Response Schema
 # ==============================
 
-class UserListResponse(SQLModel):
+class UserListResponse(BaseModel):
+    """
+    Represents a paginated response containing a list of users.
 
-    # Lietotāju saraksts
+    Attributes:
+        items (list[UserListItem]): Users included on the current page.
+        page (int): Current page number.
+        page_size (int): Number of users per page.
+        total (int): Total number of users.
+        pages (int): Total number of available pages.
+    """
+
+    # List of users
     items: list[UserListItem]
 
-    # Pašreizējā lapa
+    # Current page number
     page: int
 
-    # Lietotāju skaits vienā lapā
+    # Number of users per page
     page_size: int
 
-    # Kopējais lietotāju skaits
+    # Total number of users
     total: int
 
-    # Kopējais lapu skaits
+    # Total number of pages
     pages: int

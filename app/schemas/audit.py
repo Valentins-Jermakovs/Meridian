@@ -1,56 +1,57 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
 from datetime import datetime
 
-from sqlmodel import SQLModel
+from pydantic import BaseModel
 
 from models import AuditAction
 
 
 # ==============================
-# Audit žurnāla saraksta elements
+# Audit Log List Item
 # ==============================
 
-class AuditLogListItem(SQLModel):
+class AuditLogListItem(BaseModel):
+    """
+    Represents a single entry in the audit log.
 
-    # Ieraksta identifikators
+    Attributes:
+        id (int): Unique identifier of the log entry.
+        user_id (int | None): Identifier of the user who performed the action.
+        action (AuditAction): Type of action performed.
+        description (str): Brief description of the action.
+        success (bool): Indicates whether the action was successful.
+        created_at (datetime): Timestamp when the log entry was created.
+    """
+
     id: int
-
-    # Lietotāja identifikators
     user_id: int | None
-
-    # Veiktā darbība
     action: AuditAction
-
-    # Darbības apraksts
     description: str
-
-    # Darbības rezultāts
     success: bool
-
-    # Ieraksta izveidošanas laiks
     created_at: datetime
 
 
 # ==============================
-# Audit žurnāla saraksta atbilde
+# Audit Log List Response
 # ==============================
 
-class AuditLogListResponse(SQLModel):
+class AuditLogListResponse(BaseModel):
+    """
+    Represents a paginated response containing audit log entries.
 
-    # Audit ieraksti
+    Attributes:
+        items (list[AuditLogListItem]): List of audit log entries on the current page.
+        page (int): Current page number.
+        page_size (int): Number of log entries per page.
+        total (int): Total number of audit log entries.
+        pages (int): Total number of available pages.
+    """
+
     items: list[AuditLogListItem]
-
-    # Pašreizējā lapa
     page: int
-
-    # Ierakstu skaits vienā lapā
     page_size: int
-
-    # Kopējais ierakstu skaits
     total: int
-
-    # Kopējais lapu skaits
     pages: int

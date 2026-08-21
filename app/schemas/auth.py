@@ -1,23 +1,32 @@
 # ==============================
-# Bibliotēku imports
+# Library Imports
 # ==============================
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
+
+from pydantic import BaseModel
 
 
 # ==============================
-# Pieslēgšanās shēma
+# Login Request Schema
 # ==============================
 
-class LoginRequest(SQLModel):
+class LoginRequest(BaseModel):
+    """
+    Represents a user login request.
 
-    # Lietotājvārds vai e-pasts
+    Attributes:
+        login (str): Username or email address.
+        password (str): User password.
+    """
+
+    # Username or email address
     login: str = Field(
         min_length=1,
         max_length=255,
     )
 
-    # Parole
+    # User password
     password: str = Field(
         min_length=1,
         max_length=255,
@@ -25,16 +34,24 @@ class LoginRequest(SQLModel):
 
 
 # ==============================
-# Tokenu atbildes shēma
+# Token Response Schema
 # ==============================
 
-class TokenResponse(SQLModel):
+class TokenResponse(BaseModel):
+    """
+    Represents the authentication token response.
 
-    # Access tokens
+    Attributes:
+        access_token (str): JWT access token.
+        refresh_token (str): JWT refresh token.
+        token_type (str): Type of authentication token.
+    """
+
+    # JWT access token
     access_token: str
 
-    # Refresh tokens
+    # JWT refresh token
     refresh_token: str
 
-    # Tokena tips
+    # Authentication token type
     token_type: str = "bearer"
