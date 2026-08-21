@@ -1,11 +1,19 @@
 # ==============================
-# Bibliotēku imports
+# Library imports
 # ==============================
 
 from datetime import datetime
+
 from typing import TYPE_CHECKING
+
 from pydantic import EmailStr
-from sqlmodel import Field, Relationship, SQLModel
+
+from sqlmodel import (
+    Field, 
+    Relationship, 
+    SQLModel
+)
+
 from .user_role import UserRole
 
 if TYPE_CHECKING:
@@ -14,19 +22,42 @@ if TYPE_CHECKING:
 
 
 # ==============================
-# Lietotāja modelis
+# User Model
 # ==============================
 
 class User(SQLModel, table=True):
+    """
+    A model representing a user in the system.
+    
+    Attributes:
+        id (int | None): The unique ID of the user entry.
+        
+        username (str): The username chosen by the user.
+        
+        full_name (str): The full name of the user.
+        
+        email (EmailStr): The email address of the user.
+        
+        password_hash (str): The hashed value of the user's password.
+        
+        is_active (bool): Whether the user is active or not.
+        
+        created_at (datetime): The timestamp when the user was created.
+        
+        refresh_tokens (list[RefreshToken]): The list of refresh tokens associated with this user.
+        
+        roles (list[Role]): The list of roles assigned to this user.
+    """
+
     __tablename__ = "users"
 
-    # Lietotāja identifikators
+
     id: int | None = Field(
         default=None,
         primary_key=True,
     )
 
-    # Lietotājvārds
+
     username: str = Field(
         unique=True,
         index=True,
@@ -34,40 +65,40 @@ class User(SQLModel, table=True):
         max_length=100,
     )
 
-    # Lietotāja pilnais vārds
+
     full_name: str = Field(
         min_length=10,
         max_length=255,
     )
 
-    # Lietotāja e-pasta adrese
+
     email: EmailStr = Field(
         unique=True,
         index=True,
         max_length=255,
     )
 
-    # Lietotāja paroles hešs
+
     password_hash: str = Field(
         max_length=255,
     )
 
-    # Lietotāja konta aktivitātes statuss
+
     is_active: bool = Field(
         default=True,
     )
 
-    # Lietotāja izveidošanas datums
+
     created_at: datetime = Field(
         default_factory=datetime.now,
     )
 
-    # Lietotāja atjaunošanas tokeni
+
     refresh_tokens: list["RefreshToken"] = Relationship(
         back_populates="user",
     )
 
-    # Lietotāja lomas
+
     roles: list["Role"] = Relationship(
         back_populates="users",
         link_model=UserRole,
