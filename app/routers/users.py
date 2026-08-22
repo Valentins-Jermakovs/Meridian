@@ -21,6 +21,7 @@ from schemas import (
     UserResponse,
     UserSelfUpdate,
     UserStatisticsResponse,
+    UserRegistrationStatisticsResponse,
 )
 
 from utils import (
@@ -90,22 +91,6 @@ async def search_users(
 ):
     """
     Searches for users.
-
-    Args:
-        query (str | None):
-            The search query.
-        page (int):
-            The page number.
-        page_size (int):
-            The page size.
-        current_user (dict):
-            Authenticated administrator.
-        session (AsyncSession):
-            Asynchronous database session.
-
-    Returns:
-        UserListResponse:
-            Paginated list of users.
     """
 
     facade = UserFacade(
@@ -141,14 +126,6 @@ async def get_user_statistics(
     """
     Returns aggregated user statistics.
 
-    The statistics are cached in Redis by the user service.
-
-    Args:
-        current_user (dict):
-            Authenticated administrator.
-        session (AsyncSession):
-            Asynchronous database session.
-
     Returns:
         UserStatisticsResponse:
             Total, active, and blocked user counts.
@@ -160,6 +137,50 @@ async def get_user_statistics(
     )
 
     return await facade.get_statistics()
+
+
+# ==============================
+# User Registration Statistics
+# ==============================
+
+@router.get(
+    "/stats/registrations",
+    response_model=UserRegistrationStatisticsResponse,
+)
+async def get_user_registration_statistics(
+    year: int | None = None,
+    current_user: dict = Depends(
+        jwt_auth.require_roles(
+            ["admin"]
+        )
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    """
+    Returns monthly user registration statistics
+    for the specified year.
+
+    Args:
+        year (int | None):
+            Year for which registration statistics
+            are requested. If omitted, the current
+            year is used.
+
+    Returns:
+        UserRegistrationStatisticsResponse:
+            Monthly registration statistics.
+    """
+
+    facade = UserFacade(
+        session=session,
+        redis_cache=redis_cache,
+    )
+
+    return await facade.get_registration_statistics(
+        year=year
+    )
 
 
 # ==============================
@@ -180,16 +201,6 @@ async def get_current_user(
 ):
     """
     Gets the current user information.
-
-    Args:
-        current_user (dict):
-            Authenticated user.
-        session (AsyncSession):
-            Asynchronous database session.
-
-    Returns:
-        UserResponse:
-            Current user information.
     """
 
     facade = UserFacade(
@@ -225,18 +236,6 @@ async def update_current_user(
 ):
     """
     Updates the current user information.
-
-    Args:
-        data (UserSelfUpdate):
-            New user information.
-        current_user (dict):
-            Authenticated user.
-        session (AsyncSession):
-            Asynchronous database session.
-
-    Returns:
-        UserResponse:
-            Updated user information.
     """
 
     facade = UserFacade(
@@ -276,18 +275,6 @@ async def get_user_by_id(
 ):
     """
     Gets user information by ID.
-
-    Args:
-        user_id (int):
-            User ID.
-        current_user (dict):
-            Authenticated administrator.
-        session (AsyncSession):
-            Asynchronous database session.
-
-    Returns:
-        UserResponse:
-            User information.
     """
 
     facade = UserFacade(
@@ -322,20 +309,6 @@ async def update_user_by_admin(
 ):
     """
     Updates user information by administrator.
-
-    Args:
-        user_id (int):
-            User ID.
-        data (UserAdminUpdate):
-            New user information.
-        current_user (dict):
-            Authenticated administrator.
-        session (AsyncSession):
-            Asynchronous database session.
-
-    Returns:
-        UserResponse:
-            Updated user information.
     """
 
     facade = UserFacade(

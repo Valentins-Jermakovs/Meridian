@@ -34,7 +34,9 @@ from .user import (
     UserAdminUpdate,
     UserResponse,
     UserListItem,
-    UserListResponse
+    UserListResponse,
+    UserRegistrationStatisticItem,
+    UserRegistrationStatisticsResponse
 )
 """
 Schemas for user-related data.

@@ -16,6 +16,7 @@ from schemas import (
     UserResponse,
     UserSelfUpdate,
     UserStatisticsResponse,
+    UserRegistrationStatisticsResponse,
 )
 
 from services import (
@@ -249,3 +250,30 @@ class UserFacade:
         """
 
         return await self.user_service.get_statistics()
+
+    # ==============================
+    # Get User Registration Statistics
+    # ==============================
+
+    async def get_registration_statistics(
+        self,
+        year: int | None = None,
+    ) -> UserRegistrationStatisticsResponse:
+        """
+        Retrieves monthly user registration statistics.
+
+        Args:
+            year (int | None):
+                Year for which registration statistics are requested.
+                If not provided, the current year is used.
+
+        Returns:
+            UserRegistrationStatisticsResponse:
+                Monthly registration statistics for the specified year.
+        """
+
+        return await (
+            self.user_service.get_registration_statistics(
+                year=year
+            )
+        )

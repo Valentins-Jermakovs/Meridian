@@ -454,3 +454,76 @@ class UserRepository:
             "active": active,
             "blocked": blocked,
         }
+
+    # ==============================
+    # Get User Registration Statistics
+    # ==============================
+
+    async def get_registration_statistics(
+        self,
+        year: int,
+    ) -> list[dict[str, int | str]]:
+        """
+        Returns the number of user registrations for each month
+        of the specified year.
+
+        Args:
+            year (int):
+                Year for which statistics are requested.
+
+        Returns:
+            list[dict[str, int | str]]:
+                Monthly registration statistics.
+        """
+
+        statement = (
+            select(
+                func.extract(
+                    "month",
+                    User.created_at,
+                ).label("month"),
+                func.count(
+                    User.id
+                ).label("registrations"),
+            )
+            .where(
+                func.extract(
+                    "year",
+                    User.created_at,
+                ) == year
+            )
+            .group_by(
+                func.extract(
+                    "month",
+                    User.created_at,
+                )
+            )
+            .order_by(
+                func.extract(
+                    "month",
+                    User.created_at,
+                )
+            )
+        )
+
+        result = await self.session.execute(
+            statement
+        )
+
+        rows = result.all()
+
+        registrations_by_month = {
+            int(row.month): int(row.registrations)
+            for row in rows
+        }
+
+        return [
+            {
+                "month": month,
+                "registrations": registrations_by_month.get(
+                    month,
+                    0,
+                ),
+            }
+            for month in range(1, 13)
+        ]

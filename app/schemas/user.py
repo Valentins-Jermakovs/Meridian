@@ -13,6 +13,32 @@ from sqlmodel import Field
 
 
 # ==============================
+# User Registration Statistics
+# ==============================
+class UserRegistrationStatisticItem(
+    BaseModel
+):
+    """
+    Contains registration statistics for one month.
+    """
+
+    month: int
+    registrations: int
+
+
+class UserRegistrationStatisticsResponse(
+    BaseModel
+):
+    """
+    Contains monthly user registration statistics.
+    """
+
+    year: int
+    items: list[
+        UserRegistrationStatisticItem
+    ]
+
+# ==============================
 # User Statistics Response
 # ==============================
 
