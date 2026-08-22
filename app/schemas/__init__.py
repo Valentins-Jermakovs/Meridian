@@ -18,6 +18,12 @@ Schemas for authentication-related data.
     - TokenResponse: The response containing the access token and refresh token.
 """
 
+from .token import TokenCleanupResponse
+'''
+Schema for token cleanup responses.
+
+    - TokenCleanupResponse: The response containing the number of expired and revoked tokens deleted.
+'''
 
 from .refresh_token import RefreshTokenRequest
 """

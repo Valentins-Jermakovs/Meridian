@@ -62,6 +62,8 @@ class AuditAction(str, Enum):
 
     TOKEN_REUSE = "token_reuse"
 
+    TOKEN_CLEANUP = "clean_up_tokens"
+
 
 # ==============================
 # Audit Log Model

@@ -6,6 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import (
     select,
     update,
+    delete
+)
+
+from datetime import (
+    datetime, 
+    timedelta
 )
 
 from models import RefreshToken
@@ -33,7 +39,6 @@ class RefreshTokenRepository:
         Args:
             session (AsyncSession): The asynchronous database session.
         """
-        # Datu bāzes sesija
         self.session = session
 
     # Get a refresh token by its hash
@@ -165,3 +170,88 @@ class RefreshTokenRepository:
         Rolls back the changes to the database.
         """
         await self.session.rollback()
+
+    # ==============================
+    # Delete Expired, Non-Revoked Refresh Tokens
+    # ==============================
+
+    async def delete_expired(self) -> int:
+        """
+        Deletes refresh tokens that have expired and were NOT
+        revoked (i.e. tokens that simply went stale without being
+        rotated, logged out, or flagged for reuse).
+
+        Revoked tokens are intentionally excluded here — they are
+        retained for the configured retention period and removed
+        separately via delete_revoked_older_than, so that audit /
+        reuse-detection has a window to inspect them even after
+        their natural expiry.
+
+        Returns:
+            int: The number of deleted rows.
+        """
+
+        result = await self.session.execute(
+            delete(RefreshToken).where(
+                RefreshToken.expires_at <= datetime.now(),
+                RefreshToken.revoked.is_(False),
+            )
+        )
+
+        await self.session.flush()
+
+        return result.rowcount or 0
+
+    # ==============================
+    # Delete Old Revoked Refresh Tokens
+    # ==============================
+
+    async def delete_revoked_older_than(
+        self,
+        days: int,
+    ) -> int:
+        """
+        Deletes revoked refresh tokens created earlier than the given
+        number of days. Non-revoked tokens are untouched here,
+        regardless of expiry — that's delete_expired's job.
+
+        Args:
+            days (int): Age threshold in days for revoked tokens.
+
+        Returns:
+            int: The number of deleted rows.
+        """
+
+        cutoff = datetime.now() - timedelta(days=days)
+
+        result = await self.session.execute(
+            delete(RefreshToken).where(
+                RefreshToken.revoked.is_(True),
+                RefreshToken.created_at <= cutoff,
+            )
+        )
+
+        await self.session.flush()
+
+        return result.rowcount or 0
+
+    # ==============================
+    # Count Active Tokens (optional, for stats/testing)
+    # ==============================
+
+    async def count_active(self) -> int:
+        """
+        Counts non-revoked, non-expired refresh tokens.
+
+        Returns:
+            int: The number of active refresh tokens.
+        """
+
+        result = await self.session.execute(
+            select(RefreshToken).where(
+                RefreshToken.revoked.is_(False),
+                RefreshToken.expires_at > datetime.now(),
+            )
+        )
+
+        return len(result.scalars().all())

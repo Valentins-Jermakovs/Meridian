@@ -19,3 +19,6 @@ from .user import UserUpdateService
 
 # Provides functionality for logging users out and invalidating sessions
 from .logout import LogoutService
+
+# Provides functionality for cleaning up expired tokens
+from .token_cleanup import TokenCleanupService

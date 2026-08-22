@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
+
+    # Expiration time for revoked tokens
+    REVOKED_TOKEN_RETENTION_DAYS: int
     
     # .env file configuration
     model_config = SettingsConfigDict(

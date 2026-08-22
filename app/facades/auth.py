@@ -20,6 +20,7 @@ from schemas import (
     TokenResponse,
     UserCreate,
     UserResponse,
+    TokenCleanupResponse
 )
 
 from services import (
@@ -27,7 +28,8 @@ from services import (
     LoginService,
     LogoutService,
     RefreshTokenService,
-    RegistrationService
+    RegistrationService,
+    TokenCleanupService,
 )
 
 from utils import (
@@ -200,6 +202,20 @@ class AuthFacade:
             audit_log_service
         )
 
+        # Create an instance of the TokenCleanupService class
+        self.token_cleanup_service = TokenCleanupService(
+            refresh_token_repository=(
+                refresh_token_repository
+            ),
+            revoked_retention_days=(
+                settings.REVOKED_TOKEN_RETENTION_DAYS
+            ),
+        )
+
+        self.token_cleanup_service.audit_log_service = (
+            audit_log_service
+        )
+
     # ==============================
     # Register user
     # ==============================
@@ -309,3 +325,18 @@ class AuthFacade:
         await self.logout_service.logout_all(
             user_id
         )
+
+
+    # ==============================
+    # Cleanup stale refresh tokens
+    # ==============================
+
+    async def cleanup_tokens(self) -> TokenCleanupResponse:
+        """
+        Removes expired and old revoked refresh tokens.
+
+        Returns:
+            TokenCleanupResponse: Counts of deleted rows.
+        """
+
+        return await self.token_cleanup_service.cleanup()

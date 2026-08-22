@@ -14,16 +14,16 @@ from facades import AuthFacade
 from schemas import (
     LoginRequest,
     RefreshTokenRequest,
+    TokenCleanupResponse,
     TokenResponse,
     UserCreate,
     UserResponse,
 )
 
 from utils import (
-    JWTManager, 
-    JWTAuth
+    JWTManager,
+    JWTAuth,
 )
-
 
 
 # ==============================
@@ -70,11 +70,11 @@ async def register(
 ):
     """
     Registers a new user.
-    
+
     Args:
         data (UserCreate): The user data.
         session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
+
     Returns:
         UserResponse: The registered user.
     """
@@ -101,11 +101,11 @@ async def login(
 ):
     """
     Logs in a user.
-    
+
     Args:
         data (LoginRequest): The login request.
         session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
+
     Returns:
         TokenResponse: The token response.
     """
@@ -132,11 +132,11 @@ async def refresh(
 ):
     """
     Rotates the refresh token.
-    
+
     Args:
         data (RefreshTokenRequest): The refresh token request.
         session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
+
     Returns:
         TokenResponse: The rotated token response.
     """
@@ -163,7 +163,7 @@ async def logout(
 ):
     """
     Logs out the current session.
-    
+
     Args:
         data (RefreshTokenRequest): The refresh token request.
         session (AsyncSession): The asynchronous database session. Depends on get_session.
@@ -193,7 +193,7 @@ async def logout_all(
 ):
     """
     Logs out all sessions.
-    
+
     Args:
         current_user (dict): The current user. Depends on JWTAuth.
         session (AsyncSession): The asynchronous database session. Depends on get_session.
@@ -207,3 +207,38 @@ async def logout_all(
     await facade.logout_all(
         user_id
     )
+
+
+# ==============================
+# Cleanup Stale Refresh Tokens
+# Administrator Role
+# ==============================
+
+@router.post(
+    "/tokens/cleanup",
+    response_model=TokenCleanupResponse,
+)
+async def cleanup_tokens(
+    current_user: dict = Depends(
+        jwt_auth.require_roles(
+            ["admin"]
+        )
+    ),
+    session: AsyncSession = Depends(
+        get_session
+    ),
+):
+    """
+    Deletes expired refresh tokens and revoked refresh tokens
+    older than the configured retention period.
+
+    Args:
+        current_user (dict): The current admin user. Depends on JWTAuth.
+        session (AsyncSession): The asynchronous database session. Depends on get_session.
+
+    Returns:
+        TokenCleanupResponse: Counts of deleted expired/revoked tokens.
+    """
+    facade = AuthFacade(session)
+
+    return await facade.cleanup_tokens()
