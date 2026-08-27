@@ -82,8 +82,7 @@ class TokenCleanupService:
                 detail="Failed to clean up refresh tokens",
             )
 
-        # Аудит — некритичный side-effect, не должен рушить уже
-        # закоммиченный результат очистки токенов.
+        # Write audit log
         if self.audit_log_service is not None:
             try:
                 await self.audit_log_service.create(
