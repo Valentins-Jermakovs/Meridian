@@ -81,7 +81,7 @@ services:
     restart: unless-stopped
 
     env_file:
-      - ./app/.env
+      - .env
 
     ports:
       - "8000:8000"

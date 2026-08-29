@@ -405,7 +405,7 @@ If it already exists, Docker will report that it exists.
 Create:
 
 ```text
-app/.env
+.env
 ```
 
 and put your environment variables there.
