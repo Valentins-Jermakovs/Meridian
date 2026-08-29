@@ -1,76 +1,56 @@
-# ==============================
-# Schemas Imports
-# ==============================
+"""
+The schemas define request and response structures for authentication,
+tokens, users, system metrics, and audit logs.
+"""
 
 
-"""
-This file contains the imports of all schemas used in the application.
-"""
+# ==============================
+# Authentication schemas
+# ==============================
 
 from .auth import (
     LoginRequest,
-    TokenResponse
+    TokenResponse,
 )
-"""
-Schemas for authentication-related data.
 
-    - LoginRequest: The request body for the login endpoint.
-    - TokenResponse: The response containing the access token and refresh token.
-"""
 
-from .token import TokenCleanupResponse
-'''
-Schema for token cleanup responses.
-
-    - TokenCleanupResponse: The response containing the number of expired and revoked tokens deleted.
-'''
+# ==============================
+# Token schemas
+# ==============================
 
 from .refresh_token import RefreshTokenRequest
-"""
-Schema for refresh token requests.
-    
-    - RefreshTokenRequest: The request body for refreshing a token.
-"""
+from .token import TokenCleanupResponse
 
+
+# ==============================
+# User schemas
+# ==============================
 
 from .user import (
-    UserStatisticsResponse,
-    UserCreate,
-    UserSelfUpdate,
     UserAdminUpdate,
-    UserResponse,
+    UserCreate,
     UserListItem,
     UserListResponse,
     UserRegistrationStatisticItem,
-    UserRegistrationStatisticsResponse
+    UserRegistrationStatisticsResponse,
+    UserResponse,
+    UserSelfUpdate,
+    UserStatisticsResponse,
 )
-"""
-Schemas for user-related data.
 
-    - UserCreate: The request body for creating a new user.
-    - UserSelfUpdate: The request body for updating the current user's information.
-    - UserAdminUpdate: The request body for updating another user's information by an admin.
-    - UserResponse: The response containing the user's information.
-    - UserListItem: The list item containing the user's information in a list of users.
-    - UserListResponse: The response containing the list of users.
-"""
 
+# ==============================
+# Metrics schemas
+# ==============================
 
 from .metrics import SystemMetricsResponse
-"""
-Schema for system metrics-related data.
 
-    - SystemMetricsResponse: The response containing the system metrics.
-"""
 
+# ==============================
+# Audit schemas
+# ==============================
 
 from .audit import (
     AuditLogListItem,
-    AuditLogListResponse
+    AuditLogListResponse,
 )
-"""
-Schemas for audit log-related data.
-
-    - AuditLogListItem: The list item containing an audit log entry in a list of audit logs.
-    - AuditLogListResponse: The response containing the list of audit logs.
-"""

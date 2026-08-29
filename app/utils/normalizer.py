@@ -10,6 +10,7 @@ class DataNormalizer:
     consistent formatting to email addresses and usernames.
     """
 
+
     # ==============================
     # Normalize Text
     # ==============================
@@ -34,6 +35,7 @@ class DataNormalizer:
             value.strip().split()
         )
 
+
     # ==============================
     # Normalize Email
     # ==============================
@@ -54,6 +56,7 @@ class DataNormalizer:
         """
 
         return email.strip().lower()
+
 
     # ==============================
     # Normalize Username

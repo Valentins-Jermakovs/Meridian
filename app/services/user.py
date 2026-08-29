@@ -51,6 +51,7 @@ class UserUpdateService:
     Redis caching, user statistics, and audit logging.
     """
 
+
     def __init__(
         self,
         user_repository: UserRepository,
@@ -81,6 +82,7 @@ class UserUpdateService:
         # Audit log service
         self.audit_log_service: AuditLogService | None = None
 
+
     # ==============================
     # Create Audit Log Entry
     # ==============================
@@ -106,6 +108,7 @@ class UserUpdateService:
 
         except Exception:
             pass
+
 
     # ==============================
     # Build User Response
@@ -135,6 +138,7 @@ class UserUpdateService:
             is_active=user.is_active,
             created_at=user.created_at,
         )
+
 
     # ==============================
     # Get User by ID
@@ -183,6 +187,7 @@ class UserUpdateService:
         )
 
         return response
+
 
     # ==============================
     # Update User Data
@@ -272,6 +277,7 @@ class UserUpdateService:
             user.is_active = is_active
 
         return user
+
 
     # ==============================
     # Search Users with Pagination
@@ -377,6 +383,7 @@ class UserUpdateService:
         )
 
         return response
+
 
     # ==============================
     # Administrator User Update
@@ -640,6 +647,7 @@ class UserUpdateService:
                 detail="Failed to update user",
             )
 
+
     # ==============================
     # Self User Update
     # ==============================
@@ -799,6 +807,7 @@ class UserUpdateService:
                 detail="Failed to update user",
             )
 
+
     # ==============================
     # Get User Statistics
     # ==============================
@@ -844,6 +853,7 @@ class UserUpdateService:
         )
 
         return response
+
 
     # ==============================
     # Get User Registration Statistics

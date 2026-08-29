@@ -47,6 +47,7 @@ class LoginService:
     and records successful or failed login attempts in the audit log.
     """
 
+
     def __init__(
         self,
         user_repository: UserRepository,
@@ -106,6 +107,7 @@ class LoginService:
 
         # Audit log service
         self.audit_log_service: AuditLogService | None = None
+
 
     # ==============================
     # User Login

@@ -33,6 +33,7 @@ class JWTAuth:
     the authenticated user.
     """
 
+
     def __init__(
         self,
         jwt_manager: JWTManager,
@@ -50,6 +51,7 @@ class JWTAuth:
 
         # Bearer authentication scheme
         self.bearer = HTTPBearer()
+
 
     # ==============================
     # Get Current User from Token
@@ -95,6 +97,7 @@ class JWTAuth:
                 status_code=401,
                 detail="Invalid token",
             )
+
 
     # ==============================
     # Require Specific Roles

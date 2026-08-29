@@ -20,6 +20,7 @@ class PasswordManager:
     application event loop.
     """
 
+
     def __init__(
         self,
     ):
@@ -32,6 +33,7 @@ class PasswordManager:
 
         # Argon2 password hashing instance
         self.hasher = PasswordHasher()
+
 
     # ==============================
     # Hash Password
@@ -55,6 +57,7 @@ class PasswordManager:
         return self.hasher.hash(
             password
         )
+
 
     # ==============================
     # Synchronous Password Verification
@@ -89,6 +92,7 @@ class PasswordManager:
 
         except Exception:
             return False
+
 
     # ==============================
     # Asynchronous Password Verification

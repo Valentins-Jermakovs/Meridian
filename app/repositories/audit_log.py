@@ -27,6 +27,7 @@ class AuditLogRepository:
         session (AsyncSession): The asynchronous database session.
     """
 
+
     def __init__(
         self,
         session: AsyncSession,
@@ -39,6 +40,7 @@ class AuditLogRepository:
         """
         # Datu bāzes sesija
         self.session = session
+
 
     # Create a new audit log entry
     async def create(
@@ -64,6 +66,7 @@ class AuditLogRepository:
         )
 
         return audit_log
+
 
     # Search for audit logs
     async def search(
@@ -160,6 +163,7 @@ class AuditLogRepository:
 
         return logs, total
 
+
     # Export audit logs
     async def export(
         self,
@@ -227,6 +231,7 @@ class AuditLogRepository:
             result.scalars().all()
         )
 
+
     # Get an audit log by ID
     async def get_by_id(
         self,
@@ -249,12 +254,14 @@ class AuditLogRepository:
 
         return result.scalar_one_or_none()
 
+
     # Commit changes to the database
     async def commit(self):
         """
         Commits the changes to the database.
         """
         await self.session.commit()
+
 
     # Rollback changes to the database
     async def rollback(self):

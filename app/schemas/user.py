@@ -18,9 +18,6 @@ from sqlmodel import Field
 class UserRegistrationStatisticItem(
     BaseModel
 ):
-    """
-    Contains registration statistics for one month.
-    """
 
     month: int
     registrations: int
@@ -29,9 +26,6 @@ class UserRegistrationStatisticItem(
 class UserRegistrationStatisticsResponse(
     BaseModel
 ):
-    """
-    Contains monthly user registration statistics.
-    """
 
     year: int
     items: list[
@@ -43,9 +37,6 @@ class UserRegistrationStatisticsResponse(
 # ==============================
 
 class UserStatisticsResponse(BaseModel):
-    """
-    Contains aggregated user statistics.
-    """
 
     total: int
     active: int
@@ -57,15 +48,6 @@ class UserStatisticsResponse(BaseModel):
 # ==============================
 
 class UserCreate(BaseModel):
-    """
-    Represents the data required to create a new user account.
-
-    Attributes:
-        username (str): Unique username of the user.
-        full_name (str): Full name of the user.
-        email (EmailStr): Valid email address of the user.
-        password (str): Password for the user account.
-    """
 
     # Username
     username: str = Field(
@@ -94,16 +76,6 @@ class UserCreate(BaseModel):
 # ==============================
 
 class UserSelfUpdate(BaseModel):
-    """
-    Represents the data a user can update for their own account.
-
-    Attributes:
-        username (str | None): New username.
-        full_name (str | None): New full name.
-        email (EmailStr | None): New email address.
-        current_password (str | None): Current password used for verification.
-        password (str | None): New password.
-    """
 
     # Username
     username: str | None = Field(
@@ -142,17 +114,6 @@ class UserSelfUpdate(BaseModel):
 # ==============================
 
 class UserAdminUpdate(BaseModel):
-    """
-    Represents the data an administrator can update for a user account.
-
-    Attributes:
-        username (str | None): New username.
-        full_name (str | None): New full name.
-        email (EmailStr | None): New email address.
-        password (str | None): New password.
-        is_active (bool | None): Account activity status.
-        roles (list[str] | None): List of roles assigned to the user.
-    """
 
     # Username
     username: str | None = Field(
@@ -190,18 +151,6 @@ class UserAdminUpdate(BaseModel):
 # ==============================
 
 class UserResponse(BaseModel):
-    """
-    Represents the complete user information returned by the API.
-
-    Attributes:
-        id (int): Unique identifier of the user.
-        username (str): Username of the user.
-        full_name (str): Full name of the user.
-        email (EmailStr): Email address of the user.
-        roles (list[str]): Roles assigned to the user.
-        is_active (bool): Indicates whether the user account is active.
-        created_at (datetime): Timestamp when the user account was created.
-    """
 
     # User identifier
     id: int
@@ -230,16 +179,6 @@ class UserResponse(BaseModel):
 # ==============================
 
 class UserListItem(BaseModel):
-    """
-    Represents a single user in a paginated user list.
-
-    Attributes:
-        id (int): Unique identifier of the user.
-        username (str): Username of the user.
-        full_name (str): Full name of the user.
-        email (EmailStr): Email address of the user.
-        is_active (bool): Indicates whether the user account is active.
-    """
 
     # User identifier
     id: int
@@ -262,16 +201,6 @@ class UserListItem(BaseModel):
 # ==============================
 
 class UserListResponse(BaseModel):
-    """
-    Represents a paginated response containing a list of users.
-
-    Attributes:
-        items (list[UserListItem]): Users included on the current page.
-        page (int): Current page number.
-        page_size (int): Number of users per page.
-        total (int): Total number of users.
-        pages (int): Total number of available pages.
-    """
 
     # List of users
     items: list[UserListItem]

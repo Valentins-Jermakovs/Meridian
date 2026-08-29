@@ -21,6 +21,7 @@ class RoleRepository:
         session (AsyncSession): The asynchronous database session.
     """
 
+
     def __init__(
         self,
         session: AsyncSession,
@@ -33,6 +34,7 @@ class RoleRepository:
         """
         # Datu bāzes sesija
         self.session = session
+
 
     # Get a role by its name
     async def get_by_name(
@@ -55,6 +57,7 @@ class RoleRepository:
         )
 
         return result.scalar_one_or_none()
+
 
     # Get multiple roles by their names
     async def get_by_names(

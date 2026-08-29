@@ -19,6 +19,7 @@ class RefreshTokenManager:
     random generator and are hashed before being stored.
     """
 
+
     # ==============================
     # Generate Refresh Token
     # ==============================
@@ -32,6 +33,7 @@ class RefreshTokenManager:
         """
 
         return secrets.token_urlsafe(64)
+
 
     # ==============================
     # Hash Refresh Token
@@ -58,6 +60,7 @@ class RefreshTokenManager:
         return hashlib.sha256(
             token.encode("utf-8")
         ).hexdigest()
+
 
     # ==============================
     # Verify Refresh Token

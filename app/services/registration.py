@@ -40,6 +40,7 @@ class RegistrationService:
     user role, and records the registration in the audit log.
     """
 
+
     def __init__(
         self,
         user_repository: UserRepository,
@@ -75,6 +76,7 @@ class RegistrationService:
 
         # Audit log service
         self.audit_log_service: AuditLogService | None = None
+
 
     # ==============================
     # User Registration

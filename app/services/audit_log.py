@@ -33,6 +33,7 @@ class AuditLogService:
     and exporting audit log entries.
     """
 
+
     def __init__(
         self,
         audit_log_repository: AuditLogRepository,
@@ -55,6 +56,7 @@ class AuditLogService:
 
         # Redis cache
         self.redis_cache = redis_cache
+
 
     # ==============================
     # Create Audit Log Entry
@@ -113,6 +115,7 @@ class AuditLogService:
                 status_code=500,
                 detail="Failed to create audit log",
             )
+
 
     # ==============================
     # Search Audit Logs
@@ -268,6 +271,7 @@ class AuditLogService:
         )
 
         return response
+
 
     # ==============================
     # Export Audit Logs to CSV

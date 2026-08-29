@@ -21,6 +21,7 @@ class RedisCache:
     deserialized when retrieved.
     """
 
+
     def __init__(
         self,
         client: redis.Redis,
@@ -41,6 +42,7 @@ class RedisCache:
 
         # Default cache lifetime in seconds
         self.ttl = ttl
+
 
     # ==============================
     # Get Cached Data
@@ -75,6 +77,7 @@ class RedisCache:
         # Deserialize the stored JSON value
         return json.loads(value)
 
+
     # ==============================
     # Set Cached Data
     # ==============================
@@ -107,6 +110,7 @@ class RedisCache:
             ex=ttl or self.ttl,
         )
 
+
     # ==============================
     # Delete Cached Data
     # ==============================
@@ -126,6 +130,7 @@ class RedisCache:
         await self.client.delete(
             key
         )
+
 
     # ==============================
     # Check Key Existence
@@ -152,6 +157,7 @@ class RedisCache:
                 key
             )
         )
+
 
     # ==============================
     # Delete Keys by Pattern

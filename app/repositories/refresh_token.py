@@ -29,6 +29,7 @@ class RefreshTokenRepository:
         session (AsyncSession): The asynchronous database session.
     """
 
+
     def __init__(
         self,
         session: AsyncSession,
@@ -40,6 +41,7 @@ class RefreshTokenRepository:
             session (AsyncSession): The asynchronous database session.
         """
         self.session = session
+
 
     # Get a refresh token by its hash
     async def get_by_hash(
@@ -62,6 +64,7 @@ class RefreshTokenRepository:
         )
 
         return result.scalar_one_or_none()
+
 
     # Get a refresh token by its hash for update
     async def get_by_hash_for_update(
@@ -87,6 +90,7 @@ class RefreshTokenRepository:
 
         return result.scalar_one_or_none()
 
+
     # Create a new refresh token
     async def create(
         self,
@@ -108,6 +112,7 @@ class RefreshTokenRepository:
         await self.session.flush()
 
         return refresh_token
+
 
     # Revoke a refresh token
     async def revoke(
@@ -133,6 +138,7 @@ class RefreshTokenRepository:
 
         return refresh_token
 
+
     # Revoke all refresh tokens for a user
     async def revoke_all_by_user(
         self,
@@ -157,6 +163,7 @@ class RefreshTokenRepository:
 
         await self.session.flush()
 
+
     # Commit changes to the database
     async def commit(self):
         """
@@ -164,12 +171,14 @@ class RefreshTokenRepository:
         """
         await self.session.commit()
 
+
     # Rollback changes to the database
     async def rollback(self):
         """
         Rolls back the changes to the database.
         """
         await self.session.rollback()
+
 
     # ==============================
     # Delete Expired, Non-Revoked Refresh Tokens
@@ -201,6 +210,7 @@ class RefreshTokenRepository:
         await self.session.flush()
 
         return result.rowcount or 0
+
 
     # ==============================
     # Delete Old Revoked Refresh Tokens
@@ -234,6 +244,7 @@ class RefreshTokenRepository:
         await self.session.flush()
 
         return result.rowcount or 0
+
 
     # ==============================
     # Count Active Tokens (optional, for stats/testing)

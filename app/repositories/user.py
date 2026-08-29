@@ -30,6 +30,7 @@ class UserRepository:
         session (AsyncSession): The asynchronous database session.
     """
 
+
     def __init__(
         self,
         session: AsyncSession,
@@ -43,6 +44,7 @@ class UserRepository:
         # Datu bāzes sesija
         self.session = session
 
+
     # ==============================
     # Commit Changes to Database
     # ==============================
@@ -53,6 +55,7 @@ class UserRepository:
         """
         await self.session.commit()
 
+
     # ==============================
     # Rollback Changes to Database
     # ==============================
@@ -62,6 +65,7 @@ class UserRepository:
         Rolls back the changes to the database.
         """
         await self.session.rollback()
+
 
     # ==============================
     # Search Users
@@ -145,6 +149,7 @@ class UserRepository:
 
         return users, total
 
+
     # ==============================
     # Get User by ID
     # ==============================
@@ -171,6 +176,7 @@ class UserRepository:
         )
 
         return result.scalar_one_or_none()
+
 
     # ==============================
     # Get User by Login
@@ -202,6 +208,7 @@ class UserRepository:
 
         return result.scalar_one_or_none()
 
+
     # ==============================
     # Get User by Email
     # ==============================
@@ -229,6 +236,7 @@ class UserRepository:
 
         return result.scalar_one_or_none()
 
+
     # ==============================
     # Get User by Username
     # ==============================
@@ -255,6 +263,7 @@ class UserRepository:
         )
 
         return result.scalar_one_or_none()
+
 
     # ==============================
     # Get Roles of a User
@@ -290,6 +299,7 @@ class UserRepository:
             result.scalars().all()
         )
 
+
     # ==============================
     # Create a User
     # ==============================
@@ -318,6 +328,7 @@ class UserRepository:
 
         return user
 
+
     # ==============================
     # Update a User
     # ==============================
@@ -345,6 +356,7 @@ class UserRepository:
         )
 
         return user
+
 
     # ==============================
     # Add Role to a User
@@ -377,6 +389,7 @@ class UserRepository:
         await self.session.flush()
 
         return user_role
+
 
     # ==============================
     # Set Roles of a User
@@ -411,6 +424,7 @@ class UserRepository:
             )
 
         await self.session.flush()
+
 
     # ==============================
     # Get User Statistics
@@ -454,6 +468,7 @@ class UserRepository:
             "active": active,
             "blocked": blocked,
         }
+
 
     # ==============================
     # Get User Registration Statistics

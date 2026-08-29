@@ -45,6 +45,7 @@ class RefreshTokenService:
     generates new authentication tokens, and revokes the old token.
     """
 
+
     def __init__(
         self,
         user_repository: UserRepository,
@@ -92,6 +93,7 @@ class RefreshTokenService:
 
         # Audit log service
         self.audit_log_service: AuditLogService | None = None
+
 
     # ==============================
     # Refresh Token Rotation

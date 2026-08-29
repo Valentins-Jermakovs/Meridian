@@ -1,21 +1,13 @@
+"""
+This module contains facade classes that provide simple interfaces
+for authentication, user, and audit log-related functionality.
+"""
+
+
 # ==============================
 # Facade imports
 # ==============================
 
-from .auth import AuthFacade
-"""
-This module contains the AuthFacade class, 
-which provides a simple interface for authentication-related functionality.
-"""
-
-from .user import UserFacade
-"""
-This module contains the UserFacade class, 
-which provides a simple interface for user-related functionality.
-"""
-
 from .audit import AuditLogFacade
-"""
-This module contains the AuditLogFacade class, 
-which provides a simple interface for audit log-related functionality.
-"""
+from .auth import AuthFacade
+from .user import UserFacade

@@ -25,6 +25,7 @@ class JWTManager:
     before allowing it to be used for authentication.
     """
 
+
     def __init__(
         self,
         secret_key: str,
@@ -53,6 +54,7 @@ class JWTManager:
         self.access_token_expire_minutes = (
             access_token_expire_minutes
         )
+
 
     # ==============================
     # Create Access Token
@@ -100,6 +102,7 @@ class JWTManager:
             algorithm=self.algorithm,
         )
 
+
     # ==============================
     # Decode Access Token
     # ==============================
@@ -130,6 +133,7 @@ class JWTManager:
             self.secret_key,
             algorithms=[self.algorithm],
         )
+
 
     # ==============================
     # Validate Access Token
@@ -175,6 +179,7 @@ class JWTManager:
 
         return payload
 
+
     # ==============================
     # Check User Role
     # ==============================
@@ -208,6 +213,7 @@ class JWTManager:
 
         return role in roles
 
+
     # ==============================
     # Get User ID
     # ==============================
@@ -233,6 +239,7 @@ class JWTManager:
         )
 
         return int(payload["sub"])
+
 
     # ==============================
     # Get User Roles

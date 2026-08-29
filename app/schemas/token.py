@@ -10,13 +10,5 @@ from pydantic import BaseModel
 
 class TokenCleanupResponse(BaseModel):
 
-    '''
-    Represents a response to the token cleanup request.
-
-    Attributes:
-       expired_deleted (int): Number of expired tokens deleted.
-       revoked_deleted (int): Number of revoked tokens deleted.
-    '''
-
-    expired_deleted: int
-    revoked_deleted: int
+   expired_deleted: int
+   revoked_deleted: int

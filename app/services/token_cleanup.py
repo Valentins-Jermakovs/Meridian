@@ -26,6 +26,7 @@ class TokenCleanupService:
         (kept around temporarily for audit / reuse-detection).
     """
 
+
     def __init__(
         self,
         refresh_token_repository: RefreshTokenRepository,
@@ -43,6 +44,7 @@ class TokenCleanupService:
         self.refresh_token_repository = refresh_token_repository
         self.revoked_retention_days = revoked_retention_days
         self.audit_log_service: AuditLogService | None = None
+
 
     # ==============================
     # Run Cleanup

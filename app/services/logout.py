@@ -25,6 +25,7 @@ class LogoutService:
     their refresh tokens.
     """
 
+
     def __init__(
         self,
         refresh_token_repository: RefreshTokenRepository,
@@ -52,6 +53,7 @@ class LogoutService:
 
         # Audit log service
         self.audit_log_service: AuditLogService | None = None
+
 
     # ==============================
     # Logout Current Session
@@ -161,6 +163,7 @@ class LogoutService:
                 status_code=500,
                 detail="Failed to logout",
             )
+
 
     # ==============================
     # Logout From All Sessions

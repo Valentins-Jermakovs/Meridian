@@ -12,13 +12,6 @@ from pydantic import BaseModel
 # ==============================
 
 class LoginRequest(BaseModel):
-    """
-    Represents a user login request.
-
-    Attributes:
-        login (str): Username or email address.
-        password (str): User password.
-    """
 
     # Username or email address
     login: str = Field(
@@ -38,14 +31,6 @@ class LoginRequest(BaseModel):
 # ==============================
 
 class TokenResponse(BaseModel):
-    """
-    Represents the authentication token response.
-
-    Attributes:
-        access_token (str): JWT access token.
-        refresh_token (str): JWT refresh token.
-        token_type (str): Type of authentication token.
-    """
 
     # JWT access token
     access_token: str
