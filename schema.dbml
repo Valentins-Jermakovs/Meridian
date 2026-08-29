@@ -1,0 +1,60 @@
+// Meridian — database schema
+// Paste this file into https://dbdiagram.io to get an interactive, editable diagram.
+
+Table users {
+  id            integer      [pk, increment]
+  username      varchar(100) [unique, not null]
+  full_name     varchar(255) [not null]
+  email         varchar(255) [unique, not null]
+  password_hash varchar(255) [not null]
+  is_active     boolean      [not null, default: true]
+  created_at    timestamp    [not null, default: `now()`]
+
+  Note: 'Application user account. Password is stored as an Argon2 hash.'
+}
+
+Table roles {
+  id          integer      [pk, increment]
+  name        varchar(50)  [unique, not null]
+  description varchar(255)
+
+  Note: 'Reference catalog of roles (e.g. user, admin) used for authorization.'
+}
+
+Table user_roles {
+  user_id integer [not null]
+  role_id integer [not null]
+
+  indexes {
+    (user_id, role_id) [pk]
+  }
+
+  Note: 'Many-to-many association between users and roles.'
+}
+
+Table refresh_tokens {
+  id         integer      [pk, increment]
+  user_id    integer      [not null]
+  token_hash varchar(255) [unique, not null]
+  expires_at timestamp    [not null]
+  created_at timestamp    [not null, default: `now()`]
+  revoked    boolean      [not null, default: false]
+
+  Note: 'Hashed refresh tokens (SHA-256). Supports rotation and reuse detection.'
+}
+
+Table audit_logs {
+  id          integer      [pk, increment]
+  user_id     integer
+  action      varchar(50)  [not null]
+  description varchar(500) [not null]
+  success     boolean      [not null, default: true]
+  created_at  timestamp    [not null, default: `now()`]
+
+  Note: 'Security-relevant event log. user_id is nullable (e.g. failed logins with an unknown user).'
+}
+
+Ref: user_roles.user_id > users.id [delete: cascade]
+Ref: user_roles.role_id > roles.id [delete: cascade]
+Ref: refresh_tokens.user_id > users.id [delete: cascade]
+Ref: audit_logs.user_id > users.id [delete: set null]

@@ -1,3 +1,7 @@
+<div align="center">
+
+![Meridian](./banner.png)
+
 # Meridian
 
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -9,6 +13,8 @@
 [![Argon2](https://img.shields.io/badge/Password-Argon2-6B21A8)](https://github.com/hynek/argon2_cffi)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+</div>
 
 > Meridian is a backend authentication and user-management service built with FastAPI, PostgreSQL and Redis.
 
@@ -98,27 +104,6 @@ The service can expose live system metrics over WebSocket for administrators, su
 
 ## Architecture
 
-```text
-                         ┌─────────────────────┐
-                         │       Client        │
-                         │ Web / API / Tests   │
-                         └──────────┬──────────┘
-                                    │
-                                    ▼
-                         ┌─────────────────────┐
-                         │      FastAPI        │
-                         │       API           │
-                         └──────────┬──────────┘
-                                    │
-                    ┌───────────────┼───────────────┐
-                    │               │               │
-                    ▼               ▼               ▼
-             ┌────────────┐  ┌────────────┐  ┌─────────────┐
-             │ PostgreSQL │  │   Redis    │  │  WebSocket  │
-             │    18      │  │     8      │  │   Metrics   │
-             └────────────┘  └────────────┘  └─────────────┘
-```
-
 The application follows a layered architecture:
 
 ```text
@@ -168,6 +153,37 @@ AuditLogService
 | pgAdmin | PostgreSQL administration |
 | Locust | Load testing |
 | psutil | System metrics |
+
+---
+
+## Database Schema
+
+<div align="center">
+
+![ER diagram](./erd.png)
+
+</div>
+
+The schema is centered on the `users` table. `refresh_tokens` and `audit_logs` reference it
+directly (`audit_logs.user_id` is nullable, since failed logins may not resolve to a known user).
+`roles` is a reusable reference catalog, linked to `users` through the association table
+`user_roles`, which uses a composite primary key of `(user_id, role_id)`.
+
+The file [`schema.dbml`](./schema.dbml) can be pasted directly into
+**[dbdiagram.io](https://dbdiagram.io)** to produce an interactive, editable diagram.
+
+<details>
+<summary>Tables</summary>
+
+| Table | Purpose |
+|---|---|
+| `users` | application user accounts |
+| `roles` | reference catalog of roles used for authorization |
+| `user_roles` | many-to-many association between users and roles |
+| `refresh_tokens` | hashed refresh tokens, supporting rotation and reuse detection |
+| `audit_logs` | persistent log of security-relevant events |
+
+</details>
 
 ---
 
@@ -228,6 +244,9 @@ Meridian/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
+├── schema.dbml
+├── erd.png
+├── banner.png
 └── README.md
 ```
 
