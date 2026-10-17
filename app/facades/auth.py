@@ -1,27 +1,43 @@
+
 # ==============================
-# Library imports
+# Third-party imports
 # ==============================
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# ==============================
+# Application configuration
+# ==============================
+
 from config.config import settings
-from config.redis import redis_client
+
+# ==============================
+# Application repositories
+# ==============================
 
 from repositories import (
-    UserRepository,
-    RoleRepository,
-    RefreshTokenRepository,
     AuditLogRepository,
+    RefreshTokenRepository,
+    RoleRepository,
+    UserRepository,
 )
+
+# ==============================
+# Application schemas
+# ==============================
 
 from schemas import (
     LoginRequest,
     RefreshTokenRequest,
+    TokenCleanupResponse,
     TokenResponse,
     UserCreate,
     UserResponse,
-    TokenCleanupResponse
 )
+
+# ==============================
+# Application services
+# ==============================
 
 from services import (
     AuditLogService,
@@ -32,311 +48,177 @@ from services import (
     TokenCleanupService,
 )
 
+# ==============================
+# Application utilities
+# ==============================
+
 from utils import (
     DataNormalizer,
-    PasswordManager,
     JWTManager,
+    PasswordManager,
     RefreshTokenManager,
-    RedisCache,
 )
 
 
 # ==============================
-# Authentication Facade
+# Authentication facade
 # ==============================
 
 class AuthFacade:
-    """
-    This class provides a facade for authentication-related functionality.
-    
-    It uses various services to perform operations such as registration, 
-    login, and logout.
-    
-    Attributes:
-        session (AsyncSession): The current database session.
-        
-    Methods:
-        register: Registers a new user.
-        login: Logs in an existing user.
-        refresh: Rotates the refresh token for the current user.
-        logout: Logs out the current user from their current session.
-        logout_all: Logs out all sessions for a given user ID.
-    """
+    """Coordinate authentication services and their dependencies."""
 
     def __init__(
         self,
         session: AsyncSession,
-    ):
-        """
-        Initializes the AuthFacade instance.
-        
-        Args:
-            session (AsyncSession): The current database session.
-            
-        Returns:
-            None
-        """
+        jwt_manager: JWTManager,
+    ) -> None:
+        """Initialize authentication services."""
 
-        # Create an instance of the UserRepository class
-        user_repository = UserRepository(
-            session
-        )
+        # ==============================
+        # Repositories
+        # ==============================
 
-        # Create an instance of the RoleRepository class
-        role_repository = RoleRepository(
-            session
-        )
+        user_repository = UserRepository(session)
+        role_repository = RoleRepository(session)
+        refresh_token_repository = RefreshTokenRepository(session)
+        audit_log_repository = AuditLogRepository(session)
 
-        # Create an instance of the RefreshTokenRepository class
-        refresh_token_repository = (
-            RefreshTokenRepository(
-                session
-            )
-        )
+        # ==============================
+        # Audit log service
+        # ==============================
 
-        # Create an instance of the AuditLogRepository class
-        audit_log_repository = (
-            AuditLogRepository(
-                session
-            )
-        )
-
-        # Create a Redis cache instance
-        redis_cache = RedisCache(
-            client=redis_client,
-            ttl=settings.REDIS_CACHE_TTL,
-        )
-
-        # Create an instance of the AuditLogService class
+        # The service retrieves the shared Redis cache internally.
         audit_log_service = AuditLogService(
-            audit_log_repository=(
-                audit_log_repository
-            ),
-            redis_cache=redis_cache,
+            audit_log_repository=audit_log_repository,
         )
 
-        # Create instances of various utility classes
+        # ==============================
+        # Shared utilities
+        # ==============================
+
         normalizer = DataNormalizer()
-
         password_manager = PasswordManager()
+        refresh_token_manager = RefreshTokenManager()
 
-        jwt_manager = JWTManager(
-            secret_key=settings.JWT_SECRET_KEY,
-            algorithm=settings.JWT_ALGORITHM,
-            access_token_expire_minutes=(
-                settings.ACCESS_TOKEN_EXPIRE_MINUTES
-            ),
+        # ==============================
+        # Registration service
+        # ==============================
+
+        self.registration_service = RegistrationService(
+            user_repository=user_repository,
+            role_repository=role_repository,
+            normalizer=normalizer,
+            password_manager=password_manager,
         )
+        self.registration_service.audit_log_service = audit_log_service
 
-        refresh_token_manager = (
-            RefreshTokenManager()
-        )
+        # ==============================
+        # Login service
+        # ==============================
 
-        # Create an instance of the RegistrationService class
-        self.registration_service = (
-            RegistrationService(
-                user_repository=user_repository,
-                role_repository=role_repository,
-                normalizer=normalizer,
-                password_manager=password_manager,
-            )
-        )
-
-        self.registration_service.audit_log_service = (
-            audit_log_service
-        )
-
-        # Create an instance of the LoginService class
         self.login_service = LoginService(
             user_repository=user_repository,
-            refresh_token_repository=(
-                refresh_token_repository
-            ),
+            refresh_token_repository=refresh_token_repository,
             normalizer=normalizer,
             password_manager=password_manager,
             jwt_manager=jwt_manager,
-            refresh_token_manager=(
-                refresh_token_manager
-            ),
-            refresh_token_expire_days=(
-                settings.REFRESH_TOKEN_EXPIRE_DAYS
-            ),
+            refresh_token_manager=refresh_token_manager,
+            refresh_token_expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
         )
+        self.login_service.audit_log_service = audit_log_service
 
-        self.login_service.audit_log_service = (
-            audit_log_service
+        # ==============================
+        # Refresh token service
+        # ==============================
+
+        self.refresh_token_service = RefreshTokenService(
+            user_repository=user_repository,
+            refresh_token_repository=refresh_token_repository,
+            jwt_manager=jwt_manager,
+            refresh_token_manager=refresh_token_manager,
+            refresh_token_expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
         )
+        self.refresh_token_service.audit_log_service = audit_log_service
 
-        # Create an instance of the RefreshTokenService class
-        self.refresh_token_service = (
-            RefreshTokenService(
-                user_repository=user_repository,
-                refresh_token_repository=(
-                    refresh_token_repository
-                ),
-                jwt_manager=jwt_manager,
-                refresh_token_manager=(
-                    refresh_token_manager
-                ),
-                refresh_token_expire_days=(
-                    settings.REFRESH_TOKEN_EXPIRE_DAYS
-                ),
-            )
-        )
+        # ==============================
+        # Logout service
+        # ==============================
 
-        self.refresh_token_service.audit_log_service = (
-            audit_log_service
-        )
-
-        # Create an instance of the LogoutService class
         self.logout_service = LogoutService(
-            refresh_token_repository=(
-                refresh_token_repository
-            ),
-            refresh_token_manager=(
-                refresh_token_manager
-            ),
+            refresh_token_repository=refresh_token_repository,
+            refresh_token_manager=refresh_token_manager,
         )
+        self.logout_service.audit_log_service = audit_log_service
 
-        self.logout_service.audit_log_service = (
-            audit_log_service
-        )
+        # ==============================
+        # Token cleanup service
+        # ==============================
 
-        # Create an instance of the TokenCleanupService class
         self.token_cleanup_service = TokenCleanupService(
-            refresh_token_repository=(
-                refresh_token_repository
-            ),
-            revoked_retention_days=(
-                settings.REVOKED_TOKEN_RETENTION_DAYS
-            ),
+            refresh_token_repository=refresh_token_repository,
+            revoked_retention_days=settings.REVOKED_TOKEN_RETENTION_DAYS,
         )
-
-        self.token_cleanup_service.audit_log_service = (
-            audit_log_service
-        )
+        self.token_cleanup_service.audit_log_service = audit_log_service
 
     # ==============================
-    # Register user
+    # User registration
     # ==============================
 
     async def register(
         self,
         data: UserCreate,
     ) -> UserResponse:
-        """
-        Registers a new user.
-        
-        Args:
-            data (UserCreate): The user creation data.
-            
-        Returns:
-            UserResponse: The created user response.
-        """
-
-        return await self.registration_service.register(
-            data
-        )
+        """Register a new user."""
+        return await self.registration_service.register(data)
 
     # ==============================
-    # Login existing user
+    # User login
     # ==============================
 
     async def login(
         self,
         data: LoginRequest,
     ) -> TokenResponse:
-        """
-        Logs in an existing user.
-        
-        Args:
-            data (LoginRequest): The login request data.
-            
-        Returns:
-            TokenResponse: The token response for the logged-in user.
-        """
-
-        return await self.login_service.login(
-            data
-        )
+        """Authenticate a user and issue tokens."""
+        return await self.login_service.login(data)
 
     # ==============================
-    # Rotate refresh token
+    # Refresh token rotation
     # ==============================
 
     async def refresh(
         self,
         data: RefreshTokenRequest,
     ) -> TokenResponse:
-        """
-        Rotates the refresh token for the current user.
-        
-        Args:
-            data (RefreshTokenRequest): The refresh token request data.
-            
-        Returns:
-            TokenResponse: The new token response with a rotated refresh token.
-        """
-
-        return await self.refresh_token_service.rotate(
-            data
-        )
+        """Rotate a refresh token."""
+        return await self.refresh_token_service.rotate(data)
 
     # ==============================
-    # Logout from current session
+    # Logout current session
     # ==============================
 
     async def logout(
         self,
         data: RefreshTokenRequest,
     ) -> None:
-        """
-        Logs out the current user from their current session.
-        
-        Args:
-            data (RefreshTokenRequest): The refresh token request data.
-            
-        Returns:
-            None
-        """
-
-        await self.logout_service.logout(
-            data
-        )
+        """Log out the current refresh-token session."""
+        await self.logout_service.logout(data)
 
     # ==============================
-    # Logout all sessions for given user ID
+    # Logout all user sessions
     # ==============================
 
     async def logout_all(
         self,
         user_id: int,
     ) -> None:
-        """
-        Logs out all sessions for a given user ID.
-        
-        Args:
-            user_id (int): The ID of the user to log out.
-            
-        Returns:
-            None
-        """
-
-        await self.logout_service.logout_all(
-            user_id
-        )
-
+        """Log out all sessions belonging to a user."""
+        await self.logout_service.logout_all(user_id)
 
     # ==============================
-    # Cleanup stale refresh tokens
+    # Refresh token cleanup
     # ==============================
 
     async def cleanup_tokens(self) -> TokenCleanupResponse:
-        """
-        Removes expired and old revoked refresh tokens.
-
-        Returns:
-            TokenCleanupResponse: Counts of deleted rows.
-        """
-
+        """Remove expired and old revoked refresh tokens."""
         return await self.token_cleanup_service.cleanup()

@@ -1,65 +1,47 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
-from fastapi import (
-    APIRouter,
-    Depends,
-)
+from typing import Annotated
 
-from sqlalchemy.ext.asyncio import AsyncSession
+# ==============================
+# Third-party imports
+# ==============================
 
-from config.config import settings
-from config.database import get_session
-from config.redis import redis_client
+from fastapi import APIRouter, Depends, Query
+
+# ==============================
+# Application facades
+# ==============================
 
 from facades.user import UserFacade
+
+# ==============================
+# Application schemas
+# ==============================
 
 from schemas import (
     UserAdminUpdate,
     UserListResponse,
+    UserRegistrationStatisticsResponse,
     UserResponse,
     UserSelfUpdate,
     UserStatisticsResponse,
-    UserRegistrationStatisticsResponse,
 )
 
-from utils import (
-    RedisCache,
-    JWTManager,
-    JWTAuth,
-)
-
-
 # ==============================
-# Redis cache configuration
+# Router dependencies
 # ==============================
 
-redis_cache = RedisCache(
-    client=redis_client,
-    ttl=settings.REDIS_CACHE_TTL,
+from routers.dependencies import (
+    get_user_facade,
+    jwt_auth,
 )
 
 
 # ==============================
-# JWT Configuration
-# ==============================
-
-jwt_manager = JWTManager(
-    secret_key=settings.JWT_SECRET_KEY,
-    algorithm=settings.JWT_ALGORITHM,
-    access_token_expire_minutes=(
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    ),
-)
-
-jwt_auth = JWTAuth(
-    jwt_manager=jwt_manager,
-)
-
-
-# ==============================
-# User Router
+# Users router
 # ==============================
 
 router = APIRouter(
@@ -69,7 +51,8 @@ router = APIRouter(
 
 
 # ==============================
-# Search Users
+# Search users
+# Administrator only
 # ==============================
 
 @router.get(
@@ -77,27 +60,19 @@ router = APIRouter(
     response_model=UserListResponse,
 )
 async def search_users(
-    query: str | None = None,
-    page: int = 1,
-    page_size: int = 20,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Searches for users.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+    query: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> UserListResponse:
+    """Search users with pagination."""
     return await facade.search(
         query=query,
         page=page,
@@ -106,7 +81,8 @@ async def search_users(
 
 
 # ==============================
-# User Statistics
+# User statistics
+# Administrator only
 # ==============================
 
 @router.get(
@@ -114,33 +90,22 @@ async def search_users(
     response_model=UserStatisticsResponse,
 )
 async def get_user_statistics(
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Returns aggregated user statistics.
-
-    Returns:
-        UserStatisticsResponse:
-            Total, active, and blocked user counts.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+) -> UserStatisticsResponse:
+    """Return aggregated user statistics."""
     return await facade.get_statistics()
 
 
 # ==============================
-# User Registration Statistics
+# User registration statistics
+# Administrator only
 # ==============================
 
 @router.get(
@@ -148,43 +113,25 @@ async def get_user_statistics(
     response_model=UserRegistrationStatisticsResponse,
 )
 async def get_user_registration_statistics(
-    year: int | None = None,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Returns monthly user registration statistics
-    for the specified year.
-
-    Args:
-        year (int | None):
-            Year for which registration statistics
-            are requested. If omitted, the current
-            year is used.
-
-    Returns:
-        UserRegistrationStatisticsResponse:
-            Monthly registration statistics.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+    year: int | None = Query(default=None, ge=2000, le=2100),
+) -> UserRegistrationStatisticsResponse:
+    """Return monthly registration statistics for a year."""
     return await facade.get_registration_statistics(
-        year=year
+        year=year,
     )
 
 
 # ==============================
-# Current User Information
+# Current user profile
+# Authenticated users
 # ==============================
 
 @router.get(
@@ -192,33 +139,24 @@ async def get_user_registration_statistics(
     response_model=UserResponse,
 )
 async def get_current_user(
-    current_user: dict = Depends(
-        jwt_auth.get_current_user
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Gets the current user information.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
-    user_id = int(
-        current_user["sub"]
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.get_current_user),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+) -> UserResponse:
+    """Return the profile of the authenticated user."""
     return await facade.get_by_id(
-        user_id
+        user_id=int(current_user["sub"]),
     )
 
 
 # ==============================
-# Update Current User Information
+# Update current user profile
+# Authenticated users
 # ==============================
 
 @router.patch(
@@ -227,35 +165,25 @@ async def get_current_user(
 )
 async def update_current_user(
     data: UserSelfUpdate,
-    current_user: dict = Depends(
-        jwt_auth.get_current_user
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Updates the current user information.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
-    user_id = int(
-        current_user["sub"]
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.get_current_user),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+) -> UserResponse:
+    """Update the authenticated user's profile."""
     return await facade.update_self(
-        user_id=user_id,
+        user_id=int(current_user["sub"]),
         data=data,
     )
 
 
 # ==============================
-# Get User Information by ID
-# Administrator Role
+# Get user by ID
+# Administrator only
 # ==============================
 
 @router.get(
@@ -264,31 +192,24 @@ async def update_current_user(
 )
 async def get_user_by_id(
     user_id: int,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Gets user information by ID.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+) -> UserResponse:
+    """Return a user's profile by ID."""
     return await facade.get_by_id(
-        user_id
+        user_id=user_id,
     )
 
 
 # ==============================
-# Update User Information by Admin
+# Update user by administrator
+# Administrator only
 # ==============================
 
 @router.patch(
@@ -298,30 +219,18 @@ async def get_user_by_id(
 async def update_user_by_admin(
     user_id: int,
     data: UserAdminUpdate,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Updates user information by administrator.
-    """
-
-    facade = UserFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
-    admin_id = int(
-        current_user["sub"]
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        UserFacade,
+        Depends(get_user_facade),
+    ],
+) -> UserResponse:
+    """Update a user's profile with administrator privileges."""
     return await facade.update_by_admin(
-        admin_id=admin_id,
+        admin_id=int(current_user["sub"]),
         user_id=user_id,
         data=data,
     )

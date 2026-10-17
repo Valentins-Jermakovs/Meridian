@@ -1,65 +1,65 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
 import csv
 import io
 from math import ceil
 
+# ==============================
+# Third-party imports
+# ==============================
+
 from fastapi import HTTPException
 
-from models import (
-    AuditAction,
-    AuditLog,
-)
+# ==============================
+# Application models
+# ==============================
+
+from models import AuditAction, AuditLog
+
+# ==============================
+# Application repositories
+# ==============================
 
 from repositories import AuditLogRepository
+
+# ==============================
+# Application schemas
+# ==============================
 
 from schemas import (
     AuditLogListItem,
     AuditLogListResponse,
 )
 
-from utils import RedisCache
+# ==============================
+# Application configuration
+# ==============================
+
+from config.redis import get_redis_cache
 
 
 # ==============================
-# Audit Log Service
+# Audit log service
 # ==============================
 
 class AuditLogService:
-    """
-    Provides business logic for creating, searching, caching,
-    and exporting audit log entries.
-    """
-
+    """Create, search, cache, and export audit log entries."""
 
     def __init__(
         self,
         audit_log_repository: AuditLogRepository,
-        redis_cache: RedisCache,
-    ):
-        """
-        Initializes the audit log service.
+    ) -> None:
+        """Initialize the audit log service."""
+        self.audit_log_repository = audit_log_repository
 
-        Args:
-            audit_log_repository (AuditLogRepository):
-                Repository used to access audit log data.
-            redis_cache (RedisCache):
-                Redis cache used to store temporary search results.
-        """
-
-        # Audit log repository
-        self.audit_log_repository = (
-            audit_log_repository
-        )
-
-        # Redis cache
-        self.redis_cache = redis_cache
-
+        # Use the shared Redis cache.
+        self.redis_cache = get_redis_cache()
 
     # ==============================
-    # Create Audit Log Entry
+    # Create audit log entry
     # ==============================
 
     async def create(
@@ -69,24 +69,8 @@ class AuditLogService:
         description: str,
         success: bool = True,
     ) -> AuditLog:
-        """
-        Creates and saves a new audit log entry.
-
-        Args:
-            user_id (int | None): Identifier of the user who performed the action.
-            action (AuditAction): Type of action that was performed.
-            description (str): Description of the performed action.
-            success (bool): Indicates whether the action was successful.
-
-        Returns:
-            AuditLog: The newly created audit log entry.
-
-        Raises:
-            HTTPException: If the audit log cannot be created.
-        """
-
+        """Create and save an audit log entry."""
         try:
-            # Create a new audit log entry
             audit_log = AuditLog(
                 user_id=user_id,
                 action=action,
@@ -94,31 +78,24 @@ class AuditLogService:
                 success=success,
             )
 
-            # Save the audit log entry
-            audit_log = (
-                await self.audit_log_repository.create(
-                    audit_log
-                )
+            audit_log = await self.audit_log_repository.create(
+                audit_log
             )
 
-            # Commit the changes
             await self.audit_log_repository.commit()
 
             return audit_log
 
         except Exception:
-
-            # Roll back the transaction
             await self.audit_log_repository.rollback()
 
             raise HTTPException(
                 status_code=500,
                 detail="Failed to create audit log",
-            )
-
+            ) from None
 
     # ==============================
-    # Search Audit Logs
+    # Search audit logs
     # ==============================
 
     async def search(
@@ -130,31 +107,9 @@ class AuditLogService:
         page: int = 1,
         page_size: int = 20,
     ) -> AuditLogListResponse:
-        """
-        Searches audit log entries using the specified filters.
+        """Search audit logs with pagination and Redis caching."""
 
-        Search results are cached in Redis for a short period
-        to reduce repeated database queries.
-
-        Args:
-            query (str | None): Text used to search audit log descriptions.
-            user_id (int | None): Filter by user identifier.
-            action (AuditAction | None): Filter by action type.
-            success (bool | None): Filter by operation success status.
-            page (int): Page number to return.
-            page_size (int): Number of entries per page.
-
-        Returns:
-            AuditLogListResponse: Paginated audit log search results.
-
-        Raises:
-            HTTPException: If the page or page size is invalid.
-        """
-
-        # ==============================
-        # Validation
-        # ==============================
-
+        # Validate pagination parameters.
         if page < 1:
             raise HTTPException(
                 status_code=400,
@@ -173,20 +128,14 @@ class AuditLogService:
                 detail="Page size cannot exceed 100",
             )
 
-        # ==============================
-        # Normalization
-        # ==============================
-
+        # Normalize the search query.
         if query is not None:
             query = query.strip()
 
             if not query:
                 query = None
 
-        # ==============================
-        # Generate Redis Cache Key
-        # ==============================
-
+        # Build a cache key from the search parameters.
         cache_key = (
             "audit:search:"
             f"{query or 'all'}:"
@@ -197,38 +146,25 @@ class AuditLogService:
             f"{page_size}"
         )
 
-        # ==============================
-        # Check Redis Cache
-        # ==============================
-
-        cached_result = await self.redis_cache.get(
-            cache_key
-        )
+        # Return cached results when available.
+        cached_result = await self.redis_cache.get(cache_key)
 
         if cached_result is not None:
             return AuditLogListResponse.model_validate(
                 cached_result
             )
 
-        # ==============================
-        # Search PostgreSQL
-        # ==============================
-
-        logs, total = (
-            await self.audit_log_repository.search(
-                query=query,
-                user_id=user_id,
-                action=action,
-                success=success,
-                page=page,
-                page_size=page_size,
-            )
+        # Query PostgreSQL.
+        logs, total = await self.audit_log_repository.search(
+            query=query,
+            user_id=user_id,
+            action=action,
+            success=success,
+            page=page,
+            page_size=page_size,
         )
 
-        # ==============================
-        # Create Response Items
-        # ==============================
-
+        # Convert database records into response items.
         items = [
             AuditLogListItem(
                 id=log.id,
@@ -242,39 +178,25 @@ class AuditLogService:
             if log.id is not None
         ]
 
-        # ==============================
-        # Calculate Total Pages
-        # ==============================
-
-        pages = ceil(
-            total / page_size
-        )
-
         response = AuditLogListResponse(
             items=items,
             page=page,
             page_size=page_size,
             total=total,
-            pages=pages,
+            pages=ceil(total / page_size),
         )
 
-        # ==============================
-        # Store Result in Redis
-        # ==============================
-
+        # Cache search results briefly.
         await self.redis_cache.set(
             cache_key,
-            response.model_dump(
-                mode="json"
-            ),
+            response.model_dump(mode="json"),
             ttl=5,
         )
 
         return response
 
-
     # ==============================
-    # Export Audit Logs to CSV
+    # Export audit logs
     # ==============================
 
     async def export_csv(
@@ -284,49 +206,24 @@ class AuditLogService:
         action: AuditAction | None = None,
         success: bool | None = None,
     ) -> bytes:
-        """
-        Exports filtered audit log entries as a CSV file.
-
-        The CSV file is generated in memory and returned as UTF-8
-        encoded bytes. Formula injection protection is applied to
-        description values before writing them to the CSV file.
-
-        Args:
-            query (str | None): Text used to search audit log descriptions.
-            user_id (int | None): Filter by user identifier.
-            action (AuditAction | None): Filter by action type.
-            success (bool | None): Filter by operation success status.
-
-        Returns:
-            bytes: UTF-8 encoded CSV data with a BOM for Excel compatibility.
-
-        Raises:
-            HTTPException: If the audit log export fails.
-        """
-
-        # Normalize the search query
+        """Export filtered audit logs as a UTF-8 CSV file."""
         if query is not None:
-
             query = query.strip()
 
             if not query:
                 query = None
 
         try:
-            # Retrieve audit log entries using the specified filters
-            logs = (
-                await self.audit_log_repository.export(
-                    query=query,
-                    user_id=user_id,
-                    action=action,
-                    success=success,
-                )
+            # Retrieve matching audit log entries.
+            logs = await self.audit_log_repository.export(
+                query=query,
+                user_id=user_id,
+                action=action,
+                success=success,
             )
 
-            # Create the CSV file in memory
-            output = io.StringIO(
-                newline=""
-            )
+            # Build the CSV file in memory.
+            output = io.StringIO(newline="")
 
             writer = csv.writer(
                 output,
@@ -335,7 +232,6 @@ class AuditLogService:
                 lineterminator="\n",
             )
 
-            # Write the CSV header
             writer.writerow(
                 [
                     "ID",
@@ -347,21 +243,12 @@ class AuditLogService:
                 ]
             )
 
-            # Write audit log entries
+            # Write rows and protect against CSV formula injection.
             for log in logs:
+                description = log.description
 
-                # Protect against CSV formula injection
-                description = (
-                    log.description
-                )
-
-                if description.startswith(
-                    ("=", "+", "-", "@")
-                ):
-                    description = (
-                        "'"
-                        + description
-                    )
+                if description.startswith(("=", "+", "-", "@")):
+                    description = "'" + description
 
                 writer.writerow(
                     [
@@ -369,26 +256,18 @@ class AuditLogService:
                         log.user_id,
                         log.action.value,
                         description,
-                        str(
-                            log.success
-                        ).lower(),
-                        log.created_at.isoformat(
-                            sep=" "
-                        ),
+                        str(log.success).lower(),
+                        log.created_at.isoformat(sep=" "),
                     ]
                 )
 
-            # Add UTF-8 BOM for Excel compatibility
-            return (
-                "\ufeff"
-                + output.getvalue()
-            ).encode(
-                "utf-8"
-            )
+            # Add a UTF-8 BOM for spreadsheet compatibility.
+            csv_content = "\ufeff" + output.getvalue()
+
+            return csv_content.encode("utf-8")
 
         except Exception:
-
             raise HTTPException(
                 status_code=500,
                 detail="Failed to export audit log",
-            )
+            ) from None

@@ -1,48 +1,38 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
 import asyncio
+import logging
 
+# ==============================
+# Third-party imports
+# ==============================
+
+import jwt
 import psutil
 
-from fastapi import (
-    APIRouter,
-    Query,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
-from config.config import settings
 
+# ==============================
+# Application imports
+# ==============================
+
+from routers.dependencies import jwt_manager
 from schemas import SystemMetricsResponse
 
-from utils import (
-    JWTManager,
-    JWTAuth,
-)
+
+# ==============================
+# Logger configuration
+# ==============================
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================
-# JWT Configuration
-# ==============================
-
-jwt_manager = JWTManager(
-    secret_key=settings.JWT_SECRET_KEY,
-    algorithm=settings.JWT_ALGORITHM,
-    access_token_expire_minutes=(
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    ),
-)
-
-jwt_auth = JWTAuth(
-    jwt_manager=jwt_manager,
-)
-
-
-# ==============================
-# Metrics Router
+# Metrics router
 # ==============================
 
 router = APIRouter(
@@ -52,90 +42,64 @@ router = APIRouter(
 
 
 # ==============================
-# Server Metrics WebSocket
+# Server metrics WebSocket
 # ==============================
 
 @router.websocket("/ws/stats")
 async def metrics_websocket(
     websocket: WebSocket,
     token: str | None = Query(default=None),
-):
-    """
-    Sends server metrics over a WebSocket connection.
+) -> None:
+    """Stream process metrics to authenticated administrators."""
 
-    Args:
-        websocket (WebSocket): The WebSocket connection.
-        token (str | None): The access token. Defaults to None.
-
-    Returns:
-        None
-    """
-
-    # Check whether an access token was provided
-    if token is None:
-        await websocket.close(
-            code=status.WS_1008_POLICY_VIOLATION
-        )
+    # Require an access token.
+    if not token:
+        await websocket.close(code=1008)
         return
 
-    # Validate the access token
+    # Validate the access token.
     try:
-        payload = jwt_manager.validate_access_token(
-            token
-        )
+        payload = jwt_manager.validate_access_token(token)
 
-        # Check whether the user has the administrator role
-        roles = payload.get(
-            "roles",
-            []
-        )
-
-        if "admin" not in roles:
-            await websocket.close(
-                code=status.WS_1008_POLICY_VIOLATION
-            )
-            return
-
-    except Exception:
-        await websocket.close(
-            code=status.WS_1008_POLICY_VIOLATION
-        )
+    except jwt.InvalidTokenError:
+        await websocket.close(code=1008)
         return
 
-    # Accept the WebSocket connection
-    await websocket.accept()
+    # Allow administrators only.
+    roles = payload.get("roles", [])
 
-    # Get the current FastAPI/Uvicorn process
+    if not isinstance(roles, list) or "admin" not in roles:
+        await websocket.close(code=1008)
+        return
+
+    # Accept the connection after successful authorization.
+    await websocket.accept()
+    logger.info("Administrator connected to metrics WebSocket.")
+
+    # Monitor the current API process.
     process = psutil.Process()
+    process.cpu_percent()
 
     try:
         while True:
-            # Get CPU usage of the current process
-            cpu_percent = process.cpu_percent()
+            # Collect metrics once per second.
+            await asyncio.sleep(1)
 
-            # Get memory information of the current process
             memory = process.memory_info()
 
             data: SystemMetricsResponse = {
-                "cpu_percent": cpu_percent,
-
+                "cpu_percent": process.cpu_percent(),
                 "memory_percent": round(
                     process.memory_percent(),
                     2,
                 ),
-
                 "memory_used_mb": round(
                     memory.rss / (1024 ** 2)
                 ),
             }
 
-            # Send metrics to the connected client
-            await websocket.send_json(
-                data
-            )
-
-            # Update metrics every second
-            await asyncio.sleep(1)
+            # Send the current metrics to the connected client.
+            await websocket.send_json(data)
 
     except WebSocketDisconnect:
-        pass
+        logger.info("Administrator disconnected from metrics WebSocket.")

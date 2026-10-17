@@ -1,62 +1,47 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
-from fastapi import (
-    APIRouter,
-    Depends,
-)
+from typing import Annotated
 
+# ==============================
+# Third-party imports
+# ==============================
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from config.config import settings
-from config.database import get_session
-from config.redis import redis_client
+# ==============================
+# Application facades
+# ==============================
 
 from facades import AuditLogFacade
 
+# ==============================
+# Application models
+# ==============================
+
 from models import AuditAction
+
+# ==============================
+# Application schemas
+# ==============================
 
 from schemas import AuditLogListResponse
 
-from utils import (
-    JWTManager,
-    JWTAuth,
-    RedisCache,
+# ==============================
+# Router dependencies
+# ==============================
+
+from routers.dependencies import (
+    get_audit_log_facade,
+    jwt_auth,
 )
 
 
 # ==============================
-# JWT Configuration
-# ==============================
-
-jwt_manager = JWTManager(
-    secret_key=settings.JWT_SECRET_KEY,
-    algorithm=settings.JWT_ALGORITHM,
-    access_token_expire_minutes=(
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    ),
-)
-
-jwt_auth = JWTAuth(
-    jwt_manager=jwt_manager,
-)
-
-
-# ==============================
-# Redis Configuration
-# ==============================
-
-redis_cache = RedisCache(
-    client=redis_client,
-    ttl=settings.REDIS_CACHE_TTL,
-)
-
-
-# ==============================
-# Audit Log Router
+# Audit log router
 # ==============================
 
 router = APIRouter(
@@ -66,7 +51,8 @@ router = APIRouter(
 
 
 # ==============================
-# Search Audit Logs
+# Search audit logs
+# Administrator only
 # ==============================
 
 @router.get(
@@ -74,42 +60,22 @@ router = APIRouter(
     response_model=AuditLogListResponse,
 )
 async def search_audit_logs(
-    query: str | None = None,
-    user_id: int | None = None,
-    action: AuditAction | None = None,
-    success: bool | None = None,
-    page: int = 1,
-    page_size: int = 20,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Searches audit logs by query, user ID, action, and success status.
-    
-    Args:
-        query (str | None): The search query. Defaults to None.
-        user_id (int | None): The ID of the user. Defaults to None.
-        action (AuditAction | None): The action type. Defaults to None.
-        success (bool | None): The success status. Defaults to None.
-        page (int): The page number. Defaults to 1.
-        page_size (int): The page size. Defaults to 20.
-        current_user (dict): The current user. Depends on JWTAuth.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
-    Returns:
-        AuditLogListResponse: The list of audit logs.
-    """
-    facade = AuditLogFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        AuditLogFacade,
+        Depends(get_audit_log_facade),
+    ],
+    query: str | None = Query(default=None),
+    user_id: int | None = Query(default=None, ge=1),
+    action: AuditAction | None = Query(default=None),
+    success: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+) -> AuditLogListResponse:
+    """Search audit logs using the requested filters."""
     return await facade.search(
         query=query,
         user_id=user_id,
@@ -121,45 +87,26 @@ async def search_audit_logs(
 
 
 # ==============================
-# Export Audit Logs as CSV
+# Export audit logs
+# Administrator only
 # ==============================
 
-@router.get(
-    "/export",
-)
+@router.get("/export")
 async def export_audit_logs(
-    query: str | None = None,
-    user_id: int | None = None,
-    action: AuditAction | None = None,
-    success: bool | None = None,
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Exports audit logs as CSV.
-    
-    Args:
-        query (str | None): The search query. Defaults to None.
-        user_id (int | None): The ID of the user. Defaults to None.
-        action (AuditAction | None): The action type. Defaults to None.
-        success (bool | None): The success status. Defaults to None.
-        current_user (dict): The current user. Depends on JWTAuth.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-    
-    Returns:
-        Response: The CSV data as a response.
-    """
-    facade = AuditLogFacade(
-        session=session,
-        redis_cache=redis_cache,
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[
+        AuditLogFacade,
+        Depends(get_audit_log_facade),
+    ],
+    query: str | None = Query(default=None),
+    user_id: int | None = Query(default=None, ge=1),
+    action: AuditAction | None = Query(default=None),
+    success: bool | None = Query(default=None),
+) -> Response:
+    """Export filtered audit logs as a CSV file."""
     csv_data = await facade.export_csv(
         query=query,
         user_id=user_id,

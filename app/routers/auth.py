@@ -1,15 +1,25 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
+# ==============================
+
+from typing import Annotated
+
+# ==============================
+# Third-party imports
 # ==============================
 
 from fastapi import APIRouter, Depends
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from config.config import settings
-from config.database import get_session
+# ==============================
+# Application facades
+# ==============================
 
 from facades import AuthFacade
+
+# ==============================
+# Application schemas
+# ==============================
 
 from schemas import (
     LoginRequest,
@@ -20,31 +30,18 @@ from schemas import (
     UserResponse,
 )
 
-from utils import (
-    JWTManager,
-    JWTAuth,
+# ==============================
+# Router dependencies
+# ==============================
+
+from routers.dependencies import (
+    get_auth_facade,
+    jwt_auth,
 )
 
 
 # ==============================
-# JWT Configuration
-# ==============================
-
-jwt_manager = JWTManager(
-    secret_key=settings.JWT_SECRET_KEY,
-    algorithm=settings.JWT_ALGORITHM,
-    access_token_expire_minutes=(
-        settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    ),
-)
-
-jwt_auth = JWTAuth(
-    jwt_manager=jwt_manager,
-)
-
-
-# ==============================
-# Authentication Router
+# Authentication router
 # ==============================
 
 router = APIRouter(
@@ -54,7 +51,7 @@ router = APIRouter(
 
 
 # ==============================
-# User Registration
+# User registration
 # ==============================
 
 @router.post(
@@ -64,29 +61,14 @@ router = APIRouter(
 )
 async def register(
     data: UserCreate,
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Registers a new user.
-
-    Args:
-        data (UserCreate): The user data.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-
-    Returns:
-        UserResponse: The registered user.
-    """
-    facade = AuthFacade(session)
-
-    return await facade.register(
-        data
-    )
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> UserResponse:
+    """Register a new user."""
+    return await facade.register(data)
 
 
 # ==============================
-# User Login
+# User login
 # ==============================
 
 @router.post(
@@ -95,29 +77,14 @@ async def register(
 )
 async def login(
     data: LoginRequest,
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Logs in a user.
-
-    Args:
-        data (LoginRequest): The login request.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-
-    Returns:
-        TokenResponse: The token response.
-    """
-    facade = AuthFacade(session)
-
-    return await facade.login(
-        data
-    )
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> TokenResponse:
+    """Authenticate a user and issue tokens."""
+    return await facade.login(data)
 
 
 # ==============================
-# Refresh Token Rotation
+# Refresh token rotation
 # ==============================
 
 @router.post(
@@ -126,29 +93,14 @@ async def login(
 )
 async def refresh(
     data: RefreshTokenRequest,
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Rotates the refresh token.
-
-    Args:
-        data (RefreshTokenRequest): The refresh token request.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-
-    Returns:
-        TokenResponse: The rotated token response.
-    """
-    facade = AuthFacade(session)
-
-    return await facade.refresh(
-        data
-    )
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> TokenResponse:
+    """Rotate a refresh token."""
+    return await facade.refresh(data)
 
 
 # ==============================
-# Log out Current Session
+# Logout current session
 # ==============================
 
 @router.post(
@@ -157,26 +109,14 @@ async def refresh(
 )
 async def logout(
     data: RefreshTokenRequest,
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Logs out the current session.
-
-    Args:
-        data (RefreshTokenRequest): The refresh token request.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-    """
-    facade = AuthFacade(session)
-
-    await facade.logout(
-        data
-    )
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> None:
+    """Log out the current refresh-token session."""
+    await facade.logout(data)
 
 
 # ==============================
-# Log out All Sessions
+# Logout all user sessions
 # ==============================
 
 @router.post(
@@ -184,34 +124,21 @@ async def logout(
     status_code=204,
 )
 async def logout_all(
-    current_user: dict = Depends(
-        jwt_auth.get_current_user
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Logs out all sessions.
-
-    Args:
-        current_user (dict): The current user. Depends on JWTAuth.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-    """
-    facade = AuthFacade(session)
-
-    user_id = int(
-        current_user["sub"]
-    )
-
+    current_user: Annotated[
+        dict,
+        Depends(jwt_auth.get_current_user),
+    ],
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> None:
+    """Log out all sessions belonging to the authenticated user."""
     await facade.logout_all(
-        user_id
+        user_id=int(current_user["sub"]),
     )
 
 
 # ==============================
-# Cleanup Stale Refresh Tokens
-# Administrator Role
+# Refresh token cleanup
+# Administrator only
 # ==============================
 
 @router.post(
@@ -219,26 +146,11 @@ async def logout_all(
     response_model=TokenCleanupResponse,
 )
 async def cleanup_tokens(
-    current_user: dict = Depends(
-        jwt_auth.require_roles(
-            ["admin"]
-        )
-    ),
-    session: AsyncSession = Depends(
-        get_session
-    ),
-):
-    """
-    Deletes expired refresh tokens and revoked refresh tokens
-    older than the configured retention period.
-
-    Args:
-        current_user (dict): The current admin user. Depends on JWTAuth.
-        session (AsyncSession): The asynchronous database session. Depends on get_session.
-
-    Returns:
-        TokenCleanupResponse: Counts of deleted expired/revoked tokens.
-    """
-    facade = AuthFacade(session)
-
+    admin: Annotated[
+        dict,
+        Depends(jwt_auth.require_roles(["admin"])),
+    ],
+    facade: Annotated[AuthFacade, Depends(get_auth_facade)],
+) -> TokenCleanupResponse:
+    """Delete expired and old revoked refresh tokens."""
     return await facade.cleanup_tokens()

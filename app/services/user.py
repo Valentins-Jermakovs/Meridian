@@ -1,56 +1,78 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
 from datetime import datetime
 from math import ceil
 
+# ==============================
+# Third-party imports
+# ==============================
+
 from fastapi import HTTPException
+
+# ==============================
+# Application configuration
+# ==============================
+
+from config.redis import get_redis_cache
+
+# ==============================
+# Application models
+# ==============================
 
 from models import (
     AuditAction,
     User,
 )
 
+# ==============================
+# Application repositories
+# ==============================
+
 from repositories import (
     RoleRepository,
     UserRepository,
 )
 
+# ==============================
+# Application schemas
+# ==============================
+
 from schemas import (
     UserAdminUpdate,
     UserListItem,
     UserListResponse,
+    UserRegistrationStatisticItem,
+    UserRegistrationStatisticsResponse,
     UserResponse,
     UserSelfUpdate,
     UserStatisticsResponse,
-    UserRegistrationStatisticItem,
-    UserRegistrationStatisticsResponse,
 )
 
+# ==============================
+# Application services
+# ==============================
+
 from services import AuditLogService
+
+# ==============================
+# Application utilities
+# ==============================
 
 from utils import (
     DataNormalizer,
     PasswordManager,
-    RedisCache,
 )
 
 
 # ==============================
-# User Update Service
+# User update service
 # ==============================
 
 class UserUpdateService:
-    """
-    Provides functionality for retrieving, searching, and updating
-    user accounts.
-
-    The service supports both administrator updates and self-service
-    profile updates. It also handles role management, password changes,
-    Redis caching, user statistics, and audit logging.
-    """
-
+    """Manage user profiles, roles, caching, statistics, and audit logging."""
 
     def __init__(
         self,
@@ -58,33 +80,25 @@ class UserUpdateService:
         role_repository: RoleRepository,
         normalizer: DataNormalizer,
         password_manager: PasswordManager,
-        redis_cache: RedisCache,
-    ):
-        """
-        Initializes the user update service.
-        """
+    ) -> None:
+        """Initialize the user update service."""
 
-        # User repository
+        # Repository dependencies.
         self.user_repository = user_repository
-
-        # Role repository
         self.role_repository = role_repository
 
-        # Data normalizer
+        # Utility dependencies.
         self.normalizer = normalizer
-
-        # Password manager
         self.password_manager = password_manager
 
-        # Redis cache
-        self.redis_cache = redis_cache
+        # Use the shared Redis cache.
+        self.redis_cache = get_redis_cache()
 
-        # Audit log service
+        # The facade connects the audit logging service.
         self.audit_log_service: AuditLogService | None = None
 
-
     # ==============================
-    # Create Audit Log Entry
+    # Create audit log entry
     # ==============================
 
     async def _audit(
@@ -94,7 +108,7 @@ class UserUpdateService:
         description: str,
         success: bool,
     ) -> None:
-
+        """Record an audit event without interrupting the main operation."""
         if self.audit_log_service is None:
             return
 
@@ -105,29 +119,25 @@ class UserUpdateService:
                 description=description,
                 success=success,
             )
-
         except Exception:
             pass
 
-
     # ==============================
-    # Build User Response
+    # Build user response
     # ==============================
 
     async def _build_user_response(
         self,
         user: User,
     ) -> UserResponse:
-
+        """Build a user response including assigned roles."""
         if user.id is None:
             raise HTTPException(
                 status_code=500,
                 detail="User ID was not generated",
             )
 
-        roles = await self.user_repository.get_roles(
-            user.id
-        )
+        roles = await self.user_repository.get_roles(user.id)
 
         return UserResponse(
             id=user.id,
@@ -139,33 +149,25 @@ class UserUpdateService:
             created_at=user.created_at,
         )
 
-
     # ==============================
-    # Get User by ID
+    # Get user by ID
     # ==============================
 
     async def get_by_id(
         self,
         user_id: int,
     ) -> UserResponse:
-
-        # Redis cache key
+        """Return a user by ID, using Redis when available."""
         cache_key = f"user:{user_id}"
 
-        # Check Redis cache
-        cached_user = await self.redis_cache.get(
-            cache_key
-        )
+        # Check the shared Redis cache.
+        cached_user = await self.redis_cache.get(cache_key)
 
         if cached_user is not None:
-            return UserResponse.model_validate(
-                cached_user
-            )
+            return UserResponse.model_validate(cached_user)
 
-        # Query PostgreSQL
-        user = await self.user_repository.get_by_id(
-            user_id
-        )
+        # Query PostgreSQL on a cache miss.
+        user = await self.user_repository.get_by_id(user_id)
 
         if user is None:
             raise HTTPException(
@@ -173,24 +175,18 @@ class UserUpdateService:
                 detail="User not found",
             )
 
-        # Build response
-        response = await self._build_user_response(
-            user
-        )
+        response = await self._build_user_response(user)
 
-        # Store response in Redis
+        # Cache the response.
         await self.redis_cache.set(
             cache_key,
-            response.model_dump(
-                mode="json"
-            ),
+            response.model_dump(mode="json"),
         )
 
         return response
 
-
     # ==============================
-    # Update User Data
+    # Update user data
     # ==============================
 
     async def _update_user(
@@ -202,22 +198,15 @@ class UserUpdateService:
         password: str | None = None,
         is_active: bool | None = None,
     ) -> User:
+        """Apply validated changes to a user model."""
 
-        # Update username
+        # Update username.
         if username is not None:
-
-            username = (
-                self.normalizer.normalize_username(
-                    username
-                )
-            )
+            username = self.normalizer.normalize_username(username)
 
             if username != user.username:
-
                 existing_user = (
-                    await self.user_repository.get_by_username(
-                        username
-                    )
+                    await self.user_repository.get_by_username(username)
                 )
 
                 if existing_user is not None:
@@ -228,30 +217,17 @@ class UserUpdateService:
 
                 user.username = username
 
-        # Update full name
+        # Update full name.
         if full_name is not None:
+            user.full_name = self.normalizer.normalize_text(full_name)
 
-            user.full_name = (
-                self.normalizer.normalize_text(
-                    full_name
-                )
-            )
-
-        # Update email
+        # Update email.
         if email is not None:
-
-            email = (
-                self.normalizer.normalize_email(
-                    email
-                )
-            )
+            email = self.normalizer.normalize_email(email)
 
             if email != str(user.email):
-
                 existing_user = (
-                    await self.user_repository.get_by_email(
-                        email
-                    )
+                    await self.user_repository.get_by_email(email)
                 )
 
                 if existing_user is not None:
@@ -262,25 +238,20 @@ class UserUpdateService:
 
                 user.email = email
 
-        # Update password
+        # Update password.
         if password is not None:
-
-            user.password_hash = (
-                self.password_manager.hash_password(
-                    password
-                )
+            user.password_hash = self.password_manager.hash_password(
+                password
             )
 
-        # Update account status
+        # Update account status.
         if is_active is not None:
-
             user.is_active = is_active
 
         return user
 
-
     # ==============================
-    # Search Users with Pagination
+    # Search users with pagination
     # ==============================
 
     async def search(
@@ -289,39 +260,35 @@ class UserUpdateService:
         page: int = 1,
         page_size: int = 20,
     ) -> UserListResponse:
+        """Search users with pagination and Redis caching."""
 
-        # Validate page number
+        # Validate pagination parameters.
         if page < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page must be greater than 0",
             )
 
-        # Validate page size
         if page_size < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Page size must be greater than 0",
             )
 
-        # Limit maximum page size
         if page_size > 100:
             raise HTTPException(
                 status_code=400,
                 detail="Page size cannot exceed 100",
             )
 
-        # Normalize search text
+        # Normalize search text.
         if query is not None:
-
-            query = self.normalizer.normalize_text(
-                query
-            )
+            query = self.normalizer.normalize_text(query)
 
             if not query:
                 query = None
 
-        # Redis cache key
+        # Build a cache key from the search parameters.
         cache_key = (
             f"users:search:"
             f"{query or 'all'}:"
@@ -329,26 +296,20 @@ class UserUpdateService:
             f"{page_size}"
         )
 
-        # Check Redis cache
-        cached_result = await self.redis_cache.get(
-            cache_key
-        )
+        # Check Redis before querying PostgreSQL.
+        cached_result = await self.redis_cache.get(cache_key)
 
         if cached_result is not None:
-            return UserListResponse.model_validate(
-                cached_result
-            )
+            return UserListResponse.model_validate(cached_result)
 
-        # Query PostgreSQL
-        users, total = (
-            await self.user_repository.search(
-                query=query,
-                page=page,
-                page_size=page_size,
-            )
+        # Query PostgreSQL.
+        users, total = await self.user_repository.search(
+            query=query,
+            page=page,
+            page_size=page_size,
         )
 
-        # Build user list
+        # Build the response items.
         items = [
             UserListItem(
                 id=user.id,
@@ -361,32 +322,24 @@ class UserUpdateService:
             if user.id is not None
         ]
 
-        # Calculate total pages
-        pages = ceil(
-            total / page_size
-        )
-
         response = UserListResponse(
             items=items,
             page=page,
             page_size=page_size,
             total=total,
-            pages=pages,
+            pages=ceil(total / page_size),
         )
 
-        # Store response in Redis
+        # Cache the paginated result.
         await self.redis_cache.set(
             cache_key,
-            response.model_dump(
-                mode="json"
-            ),
+            response.model_dump(mode="json"),
         )
 
         return response
 
-
     # ==============================
-    # Administrator User Update
+    # Administrator user update
     # ==============================
 
     async def update_by_admin(
@@ -395,11 +348,10 @@ class UserUpdateService:
         user_id: int,
         data: UserAdminUpdate,
     ) -> UserResponse:
-
+        """Update a user account using administrator privileges."""
         try:
-            # Prevent self-administration
+            # Prevent administrators from updating their own account.
             if admin_id == user_id:
-
                 await self._audit(
                     user_id=admin_id,
                     action=AuditAction.ADMIN_UPDATE_USER,
@@ -415,13 +367,10 @@ class UserUpdateService:
                     detail="Administrator cannot update themselves",
                 )
 
-            # Find user
-            user = await self.user_repository.get_by_id(
-                user_id
-            )
+            # Find the target user.
+            user = await self.user_repository.get_by_id(user_id)
 
             if user is None:
-
                 await self._audit(
                     user_id=admin_id,
                     action=AuditAction.ADMIN_UPDATE_USER,
@@ -439,7 +388,7 @@ class UserUpdateService:
 
             old_is_active = user.is_active
 
-            # Update user data
+            # Update the user's basic information.
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -453,16 +402,14 @@ class UserUpdateService:
                 is_active=data.is_active,
             )
 
-            # Update roles
+            # Update user roles when requested.
             if data.roles is not None:
-
                 role_names = [
                     role.strip().lower()
                     for role in data.roles
                 ]
 
                 if not role_names:
-
                     await self._audit(
                         user_id=admin_id,
                         action=AuditAction.CHANGE_ROLE,
@@ -479,16 +426,10 @@ class UserUpdateService:
                         detail="At least one role is required",
                     )
 
-                role_names = list(
-                    dict.fromkeys(
-                        role_names
-                    )
-                )
+                role_names = list(dict.fromkeys(role_names))
 
-                roles = (
-                    await self.role_repository.get_by_names(
-                        role_names
-                    )
+                roles = await self.role_repository.get_by_names(
+                    role_names
                 )
 
                 found_role_names = {
@@ -503,7 +444,6 @@ class UserUpdateService:
                 ]
 
                 if missing_roles:
-
                     await self._audit(
                         user_id=admin_id,
                         action=AuditAction.CHANGE_ROLE,
@@ -535,33 +475,22 @@ class UserUpdateService:
                     role_ids=role_ids,
                 )
 
-            # Save user
-            user = await self.user_repository.update(
-                user
-            )
-
+            # Save the updated user.
+            user = await self.user_repository.update(user)
             await self.user_repository.commit()
 
-            # Invalidate user cache
-            await self.redis_cache.delete(
-                f"user:{user.id}"
-            )
+            # Invalidate cached user data and searches.
+            await self.redis_cache.delete(f"user:{user.id}")
+            await self.redis_cache.delete_pattern("users:search:*")
 
-            # Invalidate search cache
-            await self.redis_cache.delete_pattern(
-                "users:search:*"
-            )
-
-            # Invalidate statistics cache
+            # Invalidate statistics when the account status changes.
             if (
                 data.is_active is not None
                 and old_is_active != user.is_active
             ):
-                await self.redis_cache.delete(
-                    "users:statistics"
-                )
+                await self.redis_cache.delete("users:statistics")
 
-            # Record successful update
+            # Record the successful update.
             await self._audit(
                 user_id=admin_id,
                 action=AuditAction.ADMIN_UPDATE_USER,
@@ -572,9 +501,8 @@ class UserUpdateService:
                 success=True,
             )
 
-            # Record role changes
+            # Record role changes.
             if data.roles is not None:
-
                 await self._audit(
                     user_id=admin_id,
                     action=AuditAction.CHANGE_ROLE,
@@ -585,12 +513,11 @@ class UserUpdateService:
                     success=True,
                 )
 
-            # Record account status changes
+            # Record account status changes.
             if (
                 data.is_active is not None
                 and old_is_active != user.is_active
             ):
-
                 action = (
                     AuditAction.ACCOUNT_ACTIVATED
                     if user.is_active
@@ -602,15 +529,13 @@ class UserUpdateService:
                     action=action,
                     description=(
                         f"Administrator changed account "
-                        f"status for user "
-                        f"'{user.username}'"
+                        f"status for user '{user.username}'"
                     ),
                     success=True,
                 )
 
-            # Record password changes
+            # Record password changes.
             if data.password is not None:
-
                 await self._audit(
                     user_id=admin_id,
                     action=AuditAction.CHANGE_PASSWORD,
@@ -621,15 +546,12 @@ class UserUpdateService:
                     success=True,
                 )
 
-            return await self._build_user_response(
-                user
-            )
+            return await self._build_user_response(user)
 
         except HTTPException:
             raise
 
         except Exception:
-
             await self.user_repository.rollback()
 
             await self._audit(
@@ -645,11 +567,10 @@ class UserUpdateService:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to update user",
-            )
-
+            ) from None
 
     # ==============================
-    # Self User Update
+    # Self profile update
     # ==============================
 
     async def update_self(
@@ -657,22 +578,16 @@ class UserUpdateService:
         user_id: int,
         data: UserSelfUpdate,
     ) -> UserResponse:
-
+        """Update the authenticated user's own profile."""
         try:
-            # Find user
-            user = await self.user_repository.get_by_id(
-                user_id
-            )
+            # Find the current user.
+            user = await self.user_repository.get_by_id(user_id)
 
             if user is None:
-
                 await self._audit(
                     user_id=user_id,
                     action=AuditAction.UPDATE_SELF,
-                    description=(
-                        "User update failed: "
-                        "user not found"
-                    ),
+                    description="User update failed: user not found",
                     success=False,
                 )
 
@@ -681,17 +596,14 @@ class UserUpdateService:
                     detail="User not found",
                 )
 
-            # Validate password change
+            # Verify the current password when changing the password.
             if data.password is not None:
-
                 if data.current_password is None:
-
                     await self._audit(
                         user_id=user.id,
                         action=AuditAction.UPDATE_SELF,
                         description=(
-                            f"User '{user.username}' "
-                            "update failed: "
+                            f"User '{user.username}' update failed: "
                             "current password is required"
                         ),
                         success=False,
@@ -710,13 +622,11 @@ class UserUpdateService:
                 )
 
                 if not password_valid:
-
                     await self._audit(
                         user_id=user.id,
                         action=AuditAction.UPDATE_SELF,
                         description=(
-                            f"User '{user.username}' "
-                            "update failed: "
+                            f"User '{user.username}' update failed: "
                             "current password is incorrect"
                         ),
                         success=False,
@@ -727,7 +637,7 @@ class UserUpdateService:
                         detail="Current password is incorrect",
                     )
 
-            # Update user data
+            # Update the user's profile.
             user = await self._update_user(
                 user=user,
                 username=data.username,
@@ -740,64 +650,48 @@ class UserUpdateService:
                 password=data.password,
             )
 
-            # Save user
-            user = await self.user_repository.update(
-                user
-            )
-
+            # Save the updated user.
+            user = await self.user_repository.update(user)
             await self.user_repository.commit()
 
-            # Invalidate user cache
-            await self.redis_cache.delete(
-                f"user:{user.id}"
-            )
+            # Invalidate cached user data and searches.
+            await self.redis_cache.delete(f"user:{user.id}")
+            await self.redis_cache.delete_pattern("users:search:*")
 
-            # Invalidate search cache
-            await self.redis_cache.delete_pattern(
-                "users:search:*"
-            )
-
-            # Record successful update
+            # Record the successful update.
             await self._audit(
                 user_id=user.id,
                 action=AuditAction.UPDATE_SELF,
                 description=(
-                    f"User '{user.username}' "
-                    "updated own profile"
+                    f"User '{user.username}' updated own profile"
                 ),
                 success=True,
             )
 
-            # Record password change
+            # Record password changes.
             if data.password is not None:
-
                 await self._audit(
                     user_id=user.id,
                     action=AuditAction.CHANGE_PASSWORD,
                     description=(
-                        f"User '{user.username}' "
-                        "changed own password"
+                        f"User '{user.username}' changed own password"
                     ),
                     success=True,
                 )
 
-            return await self._build_user_response(
-                user
-            )
+            return await self._build_user_response(user)
 
         except HTTPException:
             raise
 
         except Exception:
-
             await self.user_repository.rollback()
 
             await self._audit(
                 user_id=user_id,
                 action=AuditAction.UPDATE_SELF,
                 description=(
-                    "User update failed "
-                    "because of an unexpected error"
+                    "User update failed because of an unexpected error"
                 ),
                 success=False,
             )
@@ -805,37 +699,24 @@ class UserUpdateService:
             raise HTTPException(
                 status_code=500,
                 detail="Failed to update user",
-            )
-
+            ) from None
 
     # ==============================
-    # Get User Statistics
+    # User statistics
     # ==============================
 
-    async def get_statistics(
-        self,
-    ) -> UserStatisticsResponse:
-        """
-        Returns total, active, and blocked user statistics.
-        """
-
-        # Redis cache key
+    async def get_statistics(self) -> UserStatisticsResponse:
+        """Return total, active, and blocked user statistics."""
         cache_key = "users:statistics"
 
-        # Check Redis
-        cached_result = await self.redis_cache.get(
-            cache_key
-        )
+        # Check Redis before querying PostgreSQL.
+        cached_result = await self.redis_cache.get(cache_key)
 
         if cached_result is not None:
-            return UserStatisticsResponse.model_validate(
-                cached_result
-            )
+            return UserStatisticsResponse.model_validate(cached_result)
 
-        # Query PostgreSQL
-        statistics = (
-            await self.user_repository.get_statistics()
-        )
+        # Query PostgreSQL.
+        statistics = await self.user_repository.get_statistics()
 
         response = UserStatisticsResponse(
             total=statistics["total"],
@@ -843,73 +724,45 @@ class UserUpdateService:
             blocked=statistics["blocked"],
         )
 
-        # Store in Redis
+        # Cache statistics for a short period.
         await self.redis_cache.set(
             cache_key,
-            response.model_dump(
-                mode="json"
-            ),
+            response.model_dump(mode="json"),
             ttl=30,
         )
 
         return response
 
-
     # ==============================
-    # Get User Registration Statistics
+    # User registration statistics
     # ==============================
 
     async def get_registration_statistics(
         self,
         year: int | None = None,
     ) -> UserRegistrationStatisticsResponse:
-        """
-        Returns monthly user registration statistics.
-
-        Redis is checked first. PostgreSQL is queried only
-        when the requested statistics are not cached.
-
-        Args:
-            year (int | None):
-                Year for which statistics are requested.
-                If omitted, the current year is used.
-
-        Returns:
-            UserRegistrationStatisticsResponse:
-                Monthly registration statistics.
-        """
-
-        # Use current year when not specified
+        """Return monthly user registration statistics."""
+        # Use the current year when none is specified.
         if year is None:
             year = datetime.now().year
 
-        # Redis cache key
-        cache_key = (
-            f"users:registrations:{year}"
-        )
+        cache_key = f"users:registrations:{year}"
 
-        # Check Redis cache
-        cached_result = await self.redis_cache.get(
-            cache_key
-        )
+        # Check Redis before querying PostgreSQL.
+        cached_result = await self.redis_cache.get(cache_key)
 
         if cached_result is not None:
-            return (
-                UserRegistrationStatisticsResponse
-                .model_validate(
-                    cached_result
-                )
+            return UserRegistrationStatisticsResponse.model_validate(
+                cached_result
             )
 
-        # Query PostgreSQL
+        # Query PostgreSQL.
         statistics = (
-            await self.user_repository
-            .get_registration_statistics(
-                year=year
+            await self.user_repository.get_registration_statistics(
+                year=year,
             )
         )
 
-        # Build response items
         items = [
             UserRegistrationStatisticItem(
                 month=item["month"],
@@ -923,12 +776,10 @@ class UserUpdateService:
             items=items,
         )
 
-        # Store in Redis
+        # Cache the result for five minutes.
         await self.redis_cache.set(
             cache_key,
-            response.model_dump(
-                mode="json"
-            ),
+            response.model_dump(mode="json"),
             ttl=300,
         )
 

@@ -1,66 +1,60 @@
+
 # ==============================
-# Library Imports
+# Standard library imports
 # ==============================
 
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
+# ==============================
+# Third-party imports
+# ==============================
 
 from fastapi import FastAPI
 
-# Database initialization
-from config.database import init_db
+# ==============================
+# Application configuration
+# ==============================
 
-from config.redis import (
-    init_redis,
-    close_redis,
-)
+from config.database import engine, init_db
+from config.redis import close_redis, init_redis
 
-# Router imports
+# ==============================
+# Application routers
+# ==============================
+
 from routers import main_router
 
 
 # ==============================
-# Application Lifecycle
+# Application lifecycle
 # ==============================
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Manages the FastAPI application lifecycle.
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Initialize and release application resources."""
+    try:
+        # Initialize PostgreSQL and Redis.
+        await init_db()
+        await init_redis()
 
-    Initializes the PostgreSQL database and Redis connection
-    when the application starts and closes the Redis connection
-    when the application shuts down.
+        yield
 
-    Args:
-        app (FastAPI):
-            FastAPI application instance.
-    """
-
-    # Initialize PostgreSQL
-    await init_db()
-
-    # Initialize Redis
-    await init_redis()
-
-    yield
-
-    # Close the Redis connection
-    await close_redis()
+    finally:
+        # Close Redis and always dispose of the database engine.
+        try:
+            await close_redis()
+        finally:
+            await engine.dispose()
 
 
 # ==============================
-# FastAPI Application
+# FastAPI application
 # ==============================
 
 app = FastAPI(
-    lifespan=lifespan
+    title="Meridian",
+    lifespan=lifespan,
 )
 
-
-# ==============================
-# Router Registration
-# ==============================
-
-app.include_router(
-    main_router
-)
+# Register application routes.
+app.include_router(main_router)
