@@ -30,10 +30,24 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 # ==============================
+# Application User
+# ==============================
+
+RUN groupadd --system app \
+    && useradd --system \
+        --gid app \
+        --home-dir /home/app \
+        --shell /usr/sbin/nologin \
+        app
+
+
+# ==============================
 # Application Files
 # ==============================
 
 COPY app/ .
+
+RUN chmod -R a+rX /app
 
 
 # ==============================
@@ -41,6 +55,13 @@ COPY app/ .
 # ==============================
 
 EXPOSE 8000
+
+
+# ==============================
+# Runtime User
+# ==============================
+
+USER app
 
 
 # ==============================
